@@ -9194,6 +9194,12 @@ void intel_queue_rps_boost_for_request(struct drm_i915_gem_request *req)
 	queue_work(req->i915->wq, &boost->work);
 }
 
+static void intel_boost_timeout_handler(struct timer_list* t)
+{
+	struct drm_i915_private *dev_priv = from_timer(dev_priv, t, rps.boost_timeout);
+	atomic_set(&dev_priv->rps.use_boost_freq, 0);
+}
+
 void intel_pm_setup(struct drm_i915_private *dev_priv)
 {
 	mutex_init(&dev_priv->rps.hw_lock);
@@ -9201,7 +9207,9 @@ void intel_pm_setup(struct drm_i915_private *dev_priv)
 	INIT_DELAYED_WORK(&dev_priv->rps.autoenable_work,
 			  __intel_autoenable_gt_powersave);
 	atomic_set(&dev_priv->rps.num_waiters, 0);
-
+	atomic_set(&dev_priv->rps.use_boost_freq, 0);
+	atomic_set(&dev_priv->rps.boost_ctx_count, 0);
+	timer_setup(&dev_priv->rps.boost_timeout, intel_boost_timeout_handler, 0);
 	dev_priv->pm.suspended = false;
 	atomic_set(&dev_priv->pm.wakeref_count, 0);
 }

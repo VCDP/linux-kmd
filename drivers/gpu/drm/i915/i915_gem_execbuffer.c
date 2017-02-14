@@ -2416,6 +2416,9 @@ err_request:
 		}
 	}
 
+	if (eb.ctx->flags & CONTEXT_BOOST_FREQ)
+		intel_queue_rps_boost_for_request(eb.request);
+
 err_batch_unpin:
 	if (eb.batch_flags & I915_DISPATCH_SECURE)
 		i915_vma_unpin(eb.batch);

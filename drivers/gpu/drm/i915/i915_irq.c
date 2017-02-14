@@ -1105,7 +1105,9 @@ static void gen6_pm_rps_work(struct work_struct *work)
 
 	/* Make sure we didn't queue anything we're not going to process. */
 	WARN_ON(pm_iir & ~dev_priv->pm_rps_events);
-	if ((pm_iir & dev_priv->pm_rps_events) == 0 && !client_boost)
+
+	if ((pm_iir & dev_priv->pm_rps_events) == 0 && !client_boost &&
+	    !atomic_read(&dev_priv->rps.use_boost_freq))
 		goto out;
 
 	mutex_lock(&dev_priv->rps.hw_lock);

@@ -1309,6 +1309,13 @@ struct intel_gen6_power_mgmt {
 	/* manual wa residency calculations */
 	struct intel_rps_ei ei;
 
+#define DRM_I915_BOOST_TIMEOUT 2000
+#define DRM_I915_BOOST_TIMEOUT_JIFFIES msecs_to_jiffies(DRM_I915_BOOST_TIMEOUT)
+	struct timer_list boost_timeout;
+
+	atomic_t use_boost_freq;
+	atomic_t boost_ctx_count;
+
 	/*
 	 * Protects RPS/RC6 register access and PCU communication.
 	 * Must be taken after struct_mutex if nested. Note that

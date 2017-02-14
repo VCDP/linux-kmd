@@ -1439,6 +1439,7 @@ struct drm_i915_gem_context_param {
  * drm_i915_gem_context_param_sseu.
  */
 #define I915_CONTEXT_PARAM_SSEU		0x6
+#define I915_CONTEXT_PRIVATE_PARAM_BOOST 0x80000000
 	__u64 value;
 };
 
