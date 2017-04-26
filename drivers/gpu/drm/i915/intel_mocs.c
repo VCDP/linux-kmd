@@ -103,7 +103,6 @@ static const struct drm_i915_mocs_entry skylake_mocs_table[] = {
 			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
 			   LE_LRUM(0) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
 			   LE_PFM(0) | LE_SCF(0),
-
 	  /* 0x0010 */
 	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
 	},
@@ -123,7 +122,355 @@ static const struct drm_i915_mocs_entry skylake_mocs_table[] = {
 			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
 			   LE_PFM(0) | LE_SCF(0),
 	  /* 0x0030 */
-	  .l3cc_value =   L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000037 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000039 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000037 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000039 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+		/* 0x00000017 */
+		.control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(1) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x0000003b */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000033 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000033 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000017 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(1) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000019 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(1) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+};
+
+static const struct drm_i915_mocs_entry skylake_gt3e_mocs_table[] = {
+	[I915_MOCS_UNCACHED] = {
+	  /* 0x00000009 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(0) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	[I915_MOCS_PTE] = {
+	  /* 0x00000038 */
+	  .control_value = LE_CACHEABILITY(LE_PAGETABLE) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	[I915_MOCS_CACHED] = {
+	  /* 0x0000003b */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000033 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000033 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000039 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000013 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(1) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000039 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x0000003b */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000037 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000037 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x0000001b */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(1) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x0000001b */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(1) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000003 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(0) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+};
+
+static const struct drm_i915_mocs_entry skylake_gt4e_mocs_table[] = {
+	[I915_MOCS_UNCACHED] = {
+	  /* 0x00000009 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(0) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	[I915_MOCS_PTE] = {
+	  /* 0x00000038 */
+	  .control_value = LE_CACHEABILITY(LE_PAGETABLE) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	[I915_MOCS_CACHED] = {
+	  /* 0x0000003b */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000033 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x0000003b */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000039 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000033 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x0000001b */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(1) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000037 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000039 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000037 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x0000001b */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
+			   LE_LRUM(1) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000013 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(1) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000003 */
+	  .control_value = LE_CACHEABILITY(LE_WB) |
+			   LE_TGT_CACHE(LE_TC_PAGETABLE) |
+			   LE_LRUM(0) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
 	},
 };
 
@@ -135,7 +482,6 @@ static const struct drm_i915_mocs_entry broxton_mocs_table[] = {
 			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
 			   LE_LRUM(0) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
 			   LE_PFM(0) | LE_SCF(0),
-
 	  /* 0x0010 */
 	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
 	},
@@ -145,7 +491,6 @@ static const struct drm_i915_mocs_entry broxton_mocs_table[] = {
 			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
 			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
 			   LE_PFM(0) | LE_SCF(0),
-
 	  /* 0x0030 */
 	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
 	},
@@ -155,7 +500,24 @@ static const struct drm_i915_mocs_entry broxton_mocs_table[] = {
 			   LE_TGT_CACHE(LE_TC_LLC_ELLC) |
 			   LE_LRUM(3) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
 			   LE_PFM(0) | LE_SCF(0),
-
+	  /* 0x0030 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
+	},
+	{
+	  /* 0x00000005 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(0) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
+	  /* 0x0010 */
+	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_UC),
+	},
+	{
+	  /* 0x00000005 */
+	  .control_value = LE_CACHEABILITY(LE_UC) |
+			   LE_TGT_CACHE(LE_TC_LLC) |
+			   LE_LRUM(0) | LE_AOM(0) | LE_RSC(0) | LE_SCC(0) |
+			   LE_PFM(0) | LE_SCF(0),
 	  /* 0x0030 */
 	  .l3cc_value =    L3_ESC(0) | L3_SCC(0) | L3_CACHEABILITY(L3_WB),
 	},
@@ -178,13 +540,21 @@ static bool get_mocs_settings(struct drm_i915_private *dev_priv,
 {
 	bool result = false;
 
-	if (IS_GEN9_BC(dev_priv) || IS_CANNONLAKE(dev_priv)) {
-		table->size  = ARRAY_SIZE(skylake_mocs_table);
-		table->table = skylake_mocs_table;
+	if (IS_SKL_GT3(dev_priv) && HAS_LLC(dev_priv)) {
+		table->size  = ARRAY_SIZE(skylake_gt3e_mocs_table);
+		table->table = skylake_gt3e_mocs_table;
+		result = true;
+	} else if (IS_SKL_GT4(dev_priv) && HAS_LLC(dev_priv)) {
+		table->size  = ARRAY_SIZE(skylake_gt4e_mocs_table);
+		table->table = skylake_gt4e_mocs_table;
 		result = true;
 	} else if (IS_GEN9_LP(dev_priv)) {
 		table->size  = ARRAY_SIZE(broxton_mocs_table);
 		table->table = broxton_mocs_table;
+		result = true;
+	} else if (IS_GEN9_BC(dev_priv) || IS_CANNONLAKE(dev_priv)) {
+		table->size  = ARRAY_SIZE(skylake_mocs_table);
+		table->table = skylake_mocs_table;
 		result = true;
 	} else {
 		WARN_ONCE(INTEL_INFO(dev_priv)->gen >= 9,
