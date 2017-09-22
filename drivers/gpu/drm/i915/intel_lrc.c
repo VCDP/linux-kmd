@@ -1854,13 +1854,6 @@ make_rpcs(struct drm_i915_private *dev_priv)
 	u32 rpcs = 0;
 
 	/*
-	 * No explicit RPCS request is needed to ensure full
-	 * slice/subslice/EU enablement prior to Gen9.
-	*/
-	if (INTEL_GEN(dev_priv) < 9)
-		return 0;
-
-	/*
 	 * Starting in Gen9, render power gating can leave
 	 * slice/subslice/EU in a partially enabled state. We
 	 * must make an explicit request through RPCS for full
