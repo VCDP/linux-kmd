@@ -1881,9 +1881,9 @@ make_rpcs(struct drm_i915_private *dev_priv)
 	}
 
 	if (INTEL_INFO(dev_priv)->sseu.has_eu_pg) {
-		rpcs |= INTEL_INFO(dev_priv)->sseu.eu_per_subslice <<
+		rpcs |= INTEL_INFO(dev_priv)->sseu.min_eu_per_subslice <<
 			GEN8_RPCS_EU_MIN_SHIFT;
-		rpcs |= INTEL_INFO(dev_priv)->sseu.eu_per_subslice <<
+		rpcs |= INTEL_INFO(dev_priv)->sseu.max_eu_per_subslice <<
 			GEN8_RPCS_EU_MAX_SHIFT;
 		rpcs |= GEN8_RPCS_ENABLE;
 	}

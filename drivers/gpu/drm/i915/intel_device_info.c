@@ -85,6 +85,7 @@ void intel_device_info_dump(struct drm_i915_private *dev_priv)
 static void cherryview_sseu_info_init(struct drm_i915_private *dev_priv)
 {
 	struct sseu_dev_info *sseu = &mkwrite_device_info(dev_priv)->sseu;
+	unsigned int eu_per_subslice;
 	u32 fuse, eu_dis;
 
 	fuse = I915_READ(CHV_FUSE_GT);
@@ -109,9 +110,10 @@ static void cherryview_sseu_info_init(struct drm_i915_private *dev_priv)
 	 * CHV expected to always have a uniform distribution of EU
 	 * across subslices.
 	*/
-	sseu->eu_per_subslice = sseu_subslice_total(sseu) ?
-				sseu->eu_total / sseu_subslice_total(sseu) :
-				0;
+	eu_per_subslice = sseu_subslice_total(sseu) ?
+		sseu->eu_total / sseu_subslice_total(sseu) : 0;
+	sseu->min_eu_per_subslice = eu_per_subslice;
+	sseu->max_eu_per_subslice = eu_per_subslice;
 	/*
 	 * CHV supports subslice power gating on devices with more than
 	 * one subslice, and supports EU power gating on devices with
@@ -119,13 +121,14 @@ static void cherryview_sseu_info_init(struct drm_i915_private *dev_priv)
 	*/
 	sseu->has_slice_pg = 0;
 	sseu->has_subslice_pg = sseu_subslice_total(sseu) > 1;
-	sseu->has_eu_pg = (sseu->eu_per_subslice > 2);
+	sseu->has_eu_pg = eu_per_subslice > 2;
 }
 
 static void gen9_sseu_info_init(struct drm_i915_private *dev_priv)
 {
 	struct intel_device_info *info = mkwrite_device_info(dev_priv);
 	struct sseu_dev_info *sseu = &info->sseu;
+	unsigned int eu_per_subslice;
 	int s_max = 3, ss_max = 4, eu_max = 8;
 	int s, ss;
 	u32 fuse2, eu_disable;
@@ -181,9 +184,10 @@ static void gen9_sseu_info_init(struct drm_i915_private *dev_priv)
 	 * recovery. BXT is expected to be perfectly uniform in EU
 	 * distribution.
 	*/
-	sseu->eu_per_subslice = sseu_subslice_total(sseu) ?
-				DIV_ROUND_UP(sseu->eu_total,
-					     sseu_subslice_total(sseu)) : 0;
+	eu_per_subslice = sseu_subslice_total(sseu) ?
+		DIV_ROUND_UP(sseu->eu_total, sseu_subslice_total(sseu)) : 0;
+	sseu->min_eu_per_subslice = eu_per_subslice;
+	sseu->max_eu_per_subslice = eu_per_subslice;
 	/*
 	 * SKL+ supports slice power gating on devices with more than
 	 * one slice, and supports EU power gating on devices with
@@ -196,7 +200,7 @@ static void gen9_sseu_info_init(struct drm_i915_private *dev_priv)
 		!IS_GEN9_LP(dev_priv) && hweight8(sseu->slice_mask) > 1;
 	sseu->has_subslice_pg =
 		IS_GEN9_LP(dev_priv) && sseu_subslice_total(sseu) > 1;
-	sseu->has_eu_pg = sseu->eu_per_subslice > 2;
+	sseu->has_eu_pg = eu_per_subslice > 2;
 
 	if (IS_GEN9_LP(dev_priv)) {
 #define IS_SS_DISABLED(ss)	(!(sseu->subslice_mask & BIT(ss)))
@@ -229,6 +233,7 @@ static void broadwell_sseu_info_init(struct drm_i915_private *dev_priv)
 {
 	struct sseu_dev_info *sseu = &mkwrite_device_info(dev_priv)->sseu;
 	const int s_max = 3, ss_max = 3, eu_max = 8;
+	unsigned int eu_per_subslice;
 	int s, ss;
 	u32 fuse2, eu_disable[3]; /* s_max */
 
@@ -283,9 +288,10 @@ static void broadwell_sseu_info_init(struct drm_i915_private *dev_priv)
 	 * subslices with the exception that any one EU in any one subslice may
 	 * be fused off for die recovery.
 	 */
-	sseu->eu_per_subslice = sseu_subslice_total(sseu) ?
-				DIV_ROUND_UP(sseu->eu_total,
-					     sseu_subslice_total(sseu)) : 0;
+	eu_per_subslice = sseu_subslice_total(sseu) ?
+		DIV_ROUND_UP(sseu->eu_total, sseu_subslice_total(sseu)) : 0;
+	sseu->min_eu_per_subslice = eu_per_subslice;
+	sseu->max_eu_per_subslice = eu_per_subslice;
 
 	/*
 	 * BDW supports slice power gating on devices with more than
@@ -422,7 +428,9 @@ void intel_device_info_runtime_init(struct drm_i915_private *dev_priv)
 	DRM_DEBUG_DRIVER("subslice per slice: %u\n",
 			 hweight8(info->sseu.subslice_mask));
 	DRM_DEBUG_DRIVER("EU total: %u\n", info->sseu.eu_total);
-	DRM_DEBUG_DRIVER("EU per subslice: %u\n", info->sseu.eu_per_subslice);
+	DRM_DEBUG_DRIVER("EU per subslice: [%u, %u]\n",
+			 info->sseu.min_eu_per_subslice,
+			 info->sseu.max_eu_per_subslice);
 	DRM_DEBUG_DRIVER("has slice power gating: %s\n",
 			 info->sseu.has_slice_pg ? "y" : "n");
 	DRM_DEBUG_DRIVER("has subslice power gating: %s\n",
