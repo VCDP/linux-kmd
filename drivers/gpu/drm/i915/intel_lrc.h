@@ -81,6 +81,12 @@ void intel_lr_context_resume(struct drm_i915_private *dev_priv);
 uint64_t intel_lr_context_descriptor(struct i915_gem_context *ctx,
 				     struct intel_engine_cs *engine);
 
+int intel_lr_context_set_sseu(struct i915_gem_context *ctx,
+                             struct intel_engine_cs *engine,
+                             u64 value);
+u64 intel_lr_context_get_sseu(struct i915_gem_context *ctx,
+                             struct intel_engine_cs *engine);
+
 /* Execlists */
 int intel_sanitize_enable_execlists(struct drm_i915_private *dev_priv,
 				    int enable_execlists);

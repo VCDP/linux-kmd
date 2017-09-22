@@ -1044,6 +1044,30 @@ int i915_gem_context_getparam_ioctl(struct drm_device *dev, void *data,
 	case I915_CONTEXT_PARAM_BANNABLE:
 		args->value = i915_gem_context_is_bannable(ctx);
 		break;
+	case I915_CONTEXT_PARAM_SSEU: {
+		struct drm_i915_gem_context_param_sseu param_sseu;
+		struct intel_engine_cs *engine;
+
+		if (copy_from_user(&param_sseu, u64_to_user_ptr(args->value),
+				   sizeof(param_sseu))) {
+			ret = -EFAULT;
+			break;
+		}
+
+		engine = i915_gem_engine_from_flags(to_i915(dev), file,
+						    param_sseu.flags);
+		if (!engine) {
+			ret = -EINVAL;
+			break;
+		}
+
+		param_sseu.value = intel_lr_context_get_sseu(ctx, engine);
+
+		if (copy_to_user(u64_to_user_ptr(args->value), &param_sseu,
+				 sizeof(param_sseu)))
+			ret = -EFAULT;
+		break;
+	}
 	default:
 		ret = -EINVAL;
 		break;
@@ -1098,6 +1122,31 @@ int i915_gem_context_setparam_ioctl(struct drm_device *dev, void *data,
 			i915_gem_context_set_bannable(ctx);
 		else
 			i915_gem_context_clear_bannable(ctx);
+		break;
+	case I915_CONTEXT_PARAM_SSEU:
+		if (args->size)
+			ret = -EINVAL;
+		else if (!i915.enable_execlists)
+			ret = -ENODEV;
+		else {
+			struct drm_i915_gem_context_param_sseu param_sseu;
+			struct intel_engine_cs *engine;
+
+			if (copy_from_user(&param_sseu, u64_to_user_ptr(args->value),
+					   sizeof(param_sseu))) {
+				ret = -EFAULT;
+				break;
+			}
+
+			engine = i915_gem_engine_from_flags(to_i915(dev), file,
+							    param_sseu.flags);
+			if (!engine) {
+				ret = -EINVAL;
+				break;
+			}
+
+			ret = intel_lr_context_set_sseu(ctx, engine, param_sseu.value);
+		}
 		break;
 	default:
 		ret = -EINVAL;
