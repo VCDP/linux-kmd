@@ -2004,12 +2004,12 @@ static const enum intel_engine_id user_ring_map[I915_USER_RINGS + 1] = {
 	[I915_EXEC_VEBOX]	= VECS
 };
 
-static struct intel_engine_cs *
-eb_select_engine(struct drm_i915_private *dev_priv,
-		 struct drm_file *file,
-		 struct drm_i915_gem_execbuffer2 *args)
+struct intel_engine_cs *
+i915_gem_engine_from_flags(struct drm_i915_private *dev_priv,
+			   struct drm_file *file,
+			   u64 flags)
 {
-	unsigned int user_ring_id = args->flags & I915_EXEC_RING_MASK;
+	unsigned int user_ring_id = flags & I915_EXEC_RING_MASK;
 	struct intel_engine_cs *engine;
 
 	if (user_ring_id > I915_USER_RINGS) {
@@ -2018,14 +2018,14 @@ eb_select_engine(struct drm_i915_private *dev_priv,
 	}
 
 	if ((user_ring_id != I915_EXEC_BSD) &&
-	    ((args->flags & I915_EXEC_BSD_MASK) != 0)) {
+	    ((flags & I915_EXEC_BSD_MASK) != 0)) {
 		DRM_DEBUG("execbuf with non bsd ring but with invalid "
-			  "bsd dispatch flags: %d\n", (int)(args->flags));
+			  "bsd dispatch flags: %d\n", (int)(flags));
 		return NULL;
 	}
 
 	if (user_ring_id == I915_EXEC_BSD && HAS_BSD2(dev_priv)) {
-		unsigned int bsd_idx = args->flags & I915_EXEC_BSD_MASK;
+		unsigned int bsd_idx = flags & I915_EXEC_BSD_MASK;
 
 		if (bsd_idx == I915_EXEC_BSD_DEFAULT) {
 			bsd_idx = gen8_dispatch_bsd_engine(dev_priv, file);
@@ -2223,7 +2223,7 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 	if (args->flags & I915_EXEC_IS_PINNED)
 		eb.batch_flags |= I915_DISPATCH_PINNED;
 
-	eb.engine = eb_select_engine(eb.i915, file, args);
+	eb.engine = i915_gem_engine_from_flags(eb.i915, file, args->flags);
 	if (!eb.engine)
 		return -EINVAL;
 
