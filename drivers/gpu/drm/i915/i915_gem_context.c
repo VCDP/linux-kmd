@@ -259,6 +259,8 @@ __create_hw_context(struct drm_i915_private *dev_priv,
 		    struct drm_i915_file_private *file_priv)
 {
 	struct i915_gem_context *ctx;
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
 	int ret;
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
@@ -306,6 +308,10 @@ __create_hw_context(struct drm_i915_private *dev_priv,
 	 * loads it will restore whatever remap state already exists. If there
 	 * is no remap info, it will be a NOP. */
 	ctx->remap_slice = ALL_L3_SLICES(dev_priv);
+
+	/* On all engines, use the whole device by default */
+	for_each_engine(engine, dev_priv, id)
+		ctx->engine[id].sseu = INTEL_INFO(dev_priv)->sseu;
 
 	i915_gem_context_set_bannable(ctx);
 	ctx->ring_size = 4 * PAGE_SIZE;

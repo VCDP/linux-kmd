@@ -783,25 +783,6 @@ struct intel_csr {
 	func(overlay_needs_physical); \
 	func(supports_tv);
 
-struct sseu_dev_info {
-	u8 slice_mask;
-	u8 subslice_mask;
-	u8 eu_total;
-	u8 min_eu_per_subslice;
-	u8 max_eu_per_subslice;
-	u8 min_eu_in_pool;
-	/* For each slice, which subslice(s) has(have) 7 EUs (bitfield)? */
-	u8 subslice_7eu[3];
-	u8 has_slice_pg:1;
-	u8 has_subslice_pg:1;
-	u8 has_eu_pg:1;
-};
-
-static inline unsigned int sseu_subslice_total(const struct sseu_dev_info *sseu)
-{
-	return hweight8(sseu->slice_mask) * hweight8(sseu->subslice_mask);
-}
-
 /* Keep in gen based order, and chronological order within a gen */
 enum intel_platform {
 	INTEL_PLATFORM_UNINITIALIZED = 0,

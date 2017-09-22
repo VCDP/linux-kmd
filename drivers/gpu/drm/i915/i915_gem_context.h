@@ -40,6 +40,25 @@ struct i915_hw_ppgtt;
 struct i915_vma;
 struct intel_ring;
 
+struct sseu_dev_info {
+	u8 slice_mask;
+	u8 subslice_mask;
+	u8 eu_total;
+	u8 min_eu_per_subslice;
+	u8 max_eu_per_subslice;
+	u8 min_eu_in_pool;
+	/* For each slice, which subslice(s) has(have) 7 EUs (bitfield)? */
+	u8 subslice_7eu[3];
+	u8 has_slice_pg:1;
+	u8 has_subslice_pg:1;
+	u8 has_eu_pg:1;
+};
+
+static inline unsigned int sseu_subslice_total(const struct sseu_dev_info *sseu)
+{
+	return hweight8(sseu->slice_mask) * hweight8(sseu->subslice_mask);
+}
+
 #define DEFAULT_CONTEXT_HANDLE 0
 
 /**
@@ -158,6 +177,8 @@ struct i915_gem_context {
 		u64 lrc_desc;
 		int pin_count;
 		bool initialised;
+		/** sseu: Control eu/slice partitioning */
+		struct sseu_dev_info sseu;
 	} engine[I915_NUM_ENGINES];
 
 	/** ring_size: size for allocating the per-engine ring buffer */
