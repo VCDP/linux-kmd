@@ -429,6 +429,7 @@ static void execlists_submit_ports(struct intel_engine_cs *engine)
 		writel(upper_32_bits(desc), elsp);
 		writel(lower_32_bits(desc), elsp);
 	}
+	execlists_clear_active(engine, EXECLISTS_ACTIVE_HWACK);
 }
 
 static bool ctx_single_port_submission(const struct i915_gem_context *ctx)
@@ -468,7 +469,18 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 	bool submit = false;
 
 	last = port_request(port);
-	if (last)
+	if (last) {
+
+		/*
+		 * If we write to ELSP a second time before the HW has had
+		 * a chance to respond to the previous write, we can confuse
+		 * the HW and hit "undefined behaviour". After writing to ELSP,
+		 * we must then wait until we see a context-switch event from
+		 * the HW to indicate that it has had a chance to respond.
+		 */
+		if (!execlists_is_active(engine, EXECLISTS_ACTIVE_HWACK))
+			return;
+
 		/* WaIdleLiteRestore:bdw,skl
 		 * Apply the wa NOOPs to prevent ring:HEAD == req:TAIL
 		 * as we resubmit the request. See gen8_emit_breadcrumb()
@@ -476,6 +488,7 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 		 * request.
 		 */
 		last->tail = last->wa_tail;
+	}
 
 	GEM_BUG_ON(port_isset(&port[1]));
 
@@ -656,6 +669,15 @@ static void intel_lrc_irq_handler(unsigned long data)
 			 */
 
 			status = readl(buf + 2 * head);
+
+			if (status & (GEN8_CTX_STATUS_IDLE_ACTIVE |
+				      GEN8_CTX_STATUS_PREEMPTED))
+				execlists_set_active(engine,
+						     EXECLISTS_ACTIVE_HWACK);
+			if (status & GEN8_CTX_STATUS_ACTIVE_IDLE)
+				execlists_clear_active(engine,
+						       EXECLISTS_ACTIVE_HWACK);
+
 			if (!(status & GEN8_CTX_STATUS_COMPLETED_MASK))
 				continue;
 
@@ -1334,6 +1356,7 @@ static int gen8_init_common_ring(struct intel_engine_cs *engine)
 		   GT_CONTEXT_SWITCH_INTERRUPT << engine->irq_shift);
 	clear_bit(ENGINE_IRQ_EXECLIST, &engine->irq_posted);
 
+	engine->active = 0;
 	/* After a GPU reset, we may have requests to replay */
 	submit = false;
 	for (n = 0; n < ARRAY_SIZE(engine->execlist_port); n++) {

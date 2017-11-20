@@ -444,6 +444,10 @@ struct intel_engine_cs {
 #define port_index(p, e) ((p) - (e)->execlist_port)
 		GEM_DEBUG_DECL(u32 context_id);
 	} execlist_port[2];
+
+	unsigned int active;
+#define EXECLISTS_ACTIVE_HWACK 0
+
 	struct rb_root execlist_queue;
 	struct rb_node *execlist_first;
 	unsigned int fw_domains;
@@ -780,6 +784,27 @@ intel_wait_check_request(const struct intel_wait *wait,
 static inline bool intel_wait_complete(const struct intel_wait *wait)
 {
 	return RB_EMPTY_NODE(&wait->node);
+}
+
+static inline void
+execlists_set_active(struct intel_engine_cs *execlists,
+		     unsigned int bit)
+{
+	__set_bit(bit, (unsigned long *)&execlists->active);
+}
+
+static inline void
+execlists_clear_active(struct intel_engine_cs *execlists,
+		       unsigned int bit)
+{
+	__clear_bit(bit, (unsigned long *)&execlists->active);
+}
+
+static inline bool
+execlists_is_active(const struct intel_engine_cs *execlists,
+		    unsigned int bit)
+{
+	return test_bit(bit, (unsigned long *)&execlists->active);
 }
 
 bool intel_engine_add_wait(struct intel_engine_cs *engine,
