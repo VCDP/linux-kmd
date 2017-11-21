@@ -311,11 +311,13 @@ static inline void
 execlists_context_schedule_in(struct drm_i915_gem_request *rq)
 {
 	execlists_context_status_change(rq, INTEL_CONTEXT_SCHEDULE_IN);
+	intel_engine_context_in(rq->engine);
 }
 
 static inline void
 execlists_context_schedule_out(struct drm_i915_gem_request *rq)
 {
+	intel_engine_context_out(rq->engine);
 	execlists_context_status_change(rq, INTEL_CONTEXT_SCHEDULE_OUT);
 }
 
@@ -1350,14 +1352,21 @@ static void reset_common_ring(struct intel_engine_cs *engine,
 	 * requests were completed.
 	 */
 	if (!request) {
-		for (n = 0; n < ARRAY_SIZE(engine->execlist_port); n++)
-			i915_gem_request_put(port_request(&port[n]));
+		for (n = 0; n < ARRAY_SIZE(engine->execlist_port); n++) {
+			struct drm_i915_gem_request *rq = port_request(&port[n]);
+
+			intel_engine_context_out(rq->engine);
+			i915_gem_request_put(rq);
+		}
 		memset(engine->execlist_port, 0, sizeof(engine->execlist_port));
 		return;
 	}
 
 	if (request->ctx != port_request(port)->ctx) {
-		i915_gem_request_put(port_request(port));
+		struct drm_i915_gem_request *rq = port_request(&port[n]);
+
+		intel_engine_context_out(rq->engine);
+		i915_gem_request_put(rq);
 		port[0] = port[1];
 		memset(&port[1], 0, sizeof(port[1]));
 	}
