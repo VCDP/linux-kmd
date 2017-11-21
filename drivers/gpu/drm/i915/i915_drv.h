@@ -40,6 +40,7 @@
 #include <linux/hash.h>
 #include <linux/intel-iommu.h>
 #include <linux/kref.h>
+#include <linux/perf_event.h>
 #include <linux/pm_qos.h>
 #include <linux/reservation.h>
 #include <linux/shmem_fs.h>
@@ -2182,6 +2183,8 @@ struct drm_i915_private {
 	struct pci_dev *bridge_dev;
 	struct i915_gem_context *kernel_context;
 	struct intel_engine_cs *engine[I915_NUM_ENGINES];
+	struct intel_engine_cs *engine_class[MAX_ENGINE_CLASS + 1]
+					    [MAX_ENGINE_INSTANCE + 1];
 	struct i915_vma *semaphore;
 
 	struct drm_dma_handle *status_page_dmah;
@@ -2640,6 +2643,8 @@ struct drm_i915_private {
 		struct platform_device *platdev;
 		int	irq;
 	} lpe_audio;
+
+	struct i915_pmu pmu;
 
 	/*
 	 * NOTE: This is the dri1/ums dungeon, don't add stuff here. Your patch
