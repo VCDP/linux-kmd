@@ -42,6 +42,7 @@
 	func(int, enable_execlists); \
 	func(int, enable_psr); \
 	func(int, disable_power_well); \
+	func(unsigned int, ring_multiplier); \
 	func(int, enable_ips); \
 	func(int, invert_brightness); \
 	func(int, enable_guc_loading); \

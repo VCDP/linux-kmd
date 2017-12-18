@@ -6688,12 +6688,42 @@ static void gen6_enable_rps(struct drm_i915_private *dev_priv)
 	intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
 }
 
+static inline void sanitize_ring_multiplier(struct drm_i915_private *dev_priv)
+{
+	unsigned int m = i915.ring_multiplier;
+
+	/* Currently, only support 2x or 3x multipliers */
+	if (m != 2 && m != 3)
+		i915.ring_multiplier = 2;
+}
+
+static inline void get_ring_multiplier(struct drm_i915_private *dev_priv,
+				      unsigned int *numer,
+				      unsigned int *denom)
+{
+	sanitize_ring_multiplier(dev_priv);
+
+	if (IS_GEN9(dev_priv)) {
+		*numer = i915.ring_multiplier;
+		*denom = 1;
+	} else if IS_HASWELL(dev_priv) {
+		*numer = 5;
+		*denom = 2;
+	} else {
+		/* Use a 2x ring multiplier by default */
+		*numer = 2;
+		*denom = 1;
+	}
+}
+
 static void gen6_update_ring_freq(struct drm_i915_private *dev_priv)
 {
 	int min_freq = 15;
 	unsigned int gpu_freq;
 	unsigned int max_ia_freq, min_ring_freq;
 	unsigned int max_gpu_freq, min_gpu_freq;
+	unsigned int ring_mul_numer, ring_mul_denom;
+	unsigned int ring_request_freq;
 	int scaling_factor = 180;
 	struct cpufreq_policy *policy;
 
@@ -6727,6 +6757,9 @@ static void gen6_update_ring_freq(struct drm_i915_private *dev_priv)
 		max_gpu_freq = dev_priv->rps.max_freq;
 	}
 
+
+	get_ring_multiplier(dev_priv, &ring_mul_numer, &ring_mul_denom);
+
 	/*
 	 * For each potential GPU frequency, load a ring frequency we'd like
 	 * to use for memory access.  We do this by specifying the IA frequency
@@ -6736,18 +6769,24 @@ static void gen6_update_ring_freq(struct drm_i915_private *dev_priv)
 		int diff = max_gpu_freq - gpu_freq;
 		unsigned int ia_freq = 0, ring_freq = 0;
 
+		/*
+		 * ring_request_freq = ring_multiplier * GPU frequency.
+		 * Ring freq is in 100MHz units while GPU frequency is in 50MHz
+		 * units.
+		 */
+		ring_request_freq = mult_frac(gpu_freq, ring_mul_numer,
+					      2 * ring_mul_denom);
+
 		if (IS_GEN9_BC(dev_priv) || IS_CANNONLAKE(dev_priv)) {
 			/*
-			 * ring_freq = 2 * GT. ring_freq is in 100MHz units
-			 * No floor required for ring frequency on SKL.
+			 * ring_freq = ring request freq. No floor required for
+			 * ring frequency on SKL.
 			 */
-			ring_freq = gpu_freq;
-		} else if (INTEL_INFO(dev_priv)->gen >= 8) {
-			/* max(2 * GT, DDR). NB: GT is 50MHz units */
-			ring_freq = max(min_ring_freq, gpu_freq);
-		} else if (IS_HASWELL(dev_priv)) {
-			ring_freq = mult_frac(gpu_freq, 5, 4);
-			ring_freq = max(min_ring_freq, ring_freq);
+			ring_freq = ring_request_freq;
+		} else if (INTEL_INFO(dev_priv)->gen >= 8 ||
+			IS_HASWELL(dev_priv)) {
+			/* max(ring request freq, DDR). NB: GT is 50MHz units */
+			ring_freq = max(min_ring_freq, ring_request_freq);
 			/* leave ia_freq as the default, chosen by cpufreq */
 		} else {
 			/* On older processors, there is no separate ring

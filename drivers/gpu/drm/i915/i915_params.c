@@ -41,6 +41,7 @@ struct i915_params i915 __read_mostly = {
 	.enable_psr = -1,
 	.alpha_support = IS_ENABLED(CONFIG_DRM_I915_ALPHA_SUPPORT),
 	.disable_power_well = -1,
+	.ring_multiplier = 2,
 	.enable_ips = 1,
 	.fastboot = 0,
 	.prefault_disable = 0,
@@ -160,6 +161,11 @@ module_param_named_unsafe(disable_power_well, i915.disable_power_well, int, 0400
 MODULE_PARM_DESC(disable_power_well,
 	"Disable display power wells when possible "
 	"(-1=auto [default], 0=power wells always on, 1=power wells disabled when possible)");
+
+module_param_named_unsafe(ring_multiplier, i915.ring_multiplier, uint, 0400);
+MODULE_PARM_DESC(ring_multiplier,
+	"Override Ring/GT frequency multiplier."
+	"(2=2x ring multiplier [defaut], 3=3x ring multiplier)");
 
 module_param_named_unsafe(enable_ips, i915.enable_ips, int, 0600);
 MODULE_PARM_DESC(enable_ips, "Enable IPS (default: true)");
