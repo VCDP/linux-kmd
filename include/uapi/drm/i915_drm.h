@@ -335,6 +335,7 @@ typedef struct _drm_i915_sarea {
 #define DRM_I915_PERF_OPEN		0x36
 #define DRM_I915_PERF_ADD_CONFIG	0x37
 #define DRM_I915_PERF_REMOVE_CONFIG	0x38
+#define DRM_I915_LOAD_BALANCING_HINT    0x3f
 
 #define DRM_IOCTL_I915_INIT		DRM_IOW( DRM_COMMAND_BASE + DRM_I915_INIT, drm_i915_init_t)
 #define DRM_IOCTL_I915_FLUSH		DRM_IO ( DRM_COMMAND_BASE + DRM_I915_FLUSH)
@@ -392,6 +393,7 @@ typedef struct _drm_i915_sarea {
 #define DRM_IOCTL_I915_PERF_OPEN	DRM_IOW(DRM_COMMAND_BASE + DRM_I915_PERF_OPEN, struct drm_i915_perf_open_param)
 #define DRM_IOCTL_I915_PERF_ADD_CONFIG	DRM_IOW(DRM_COMMAND_BASE + DRM_I915_PERF_ADD_CONFIG, struct drm_i915_perf_oa_config)
 #define DRM_IOCTL_I915_PERF_REMOVE_CONFIG	DRM_IOW(DRM_COMMAND_BASE + DRM_I915_PERF_REMOVE_CONFIG, __u64)
+#define DRM_IOCTL_I915_LOAD_BALANCING_HINT	DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_LOAD_BALANCING_HINT, struct drm_i915_ring_load_query)
 
 /* Allow drivers to submit batchbuffers directly to hardware, relying
  * on the security mechanisms provided by hardware.
@@ -1615,6 +1617,21 @@ struct drm_i915_perf_oa_config {
 	__u64 __user boolean_regs_ptr;
 	__u64 __user flex_regs_ptr;
 };
+
+typedef struct drm_i915_ring_load_info
+{
+       /** ID of ring & load counter*/
+       int ring_id;
+       int load_cnt;
+} drm_i915_ring_load_info;
+
+typedef struct drm_i915_ring_load_query
+{
+       /** Number of rings, load counters of which we want to query & ptr to array
+         * of load info structures */
+       int query_size;
+       drm_i915_ring_load_info __user *load_info;
+} drm_i915_ring_load_query;
 
 #if defined(__cplusplus)
 }

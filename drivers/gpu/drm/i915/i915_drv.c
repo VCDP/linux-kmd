@@ -272,6 +272,42 @@ static void intel_detect_pch(struct drm_i915_private *dev_priv)
 	pci_dev_put(pch);
 }
 
+static int i915_load_balancing_hint(struct drm_device *dev, void *data,
+				    struct drm_file *file_priv)
+{
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct drm_i915_ring_load_query *query = data;
+	struct drm_i915_ring_load_info load_info;
+	int i, ring_id;
+
+	if (!query || !query->load_info)
+		return EINVAL;
+
+	/* Update performance counters for given rings. */
+	for (i = 0; i < query->query_size; i++) {
+		if (copy_from_user(&load_info, &query->load_info[i], sizeof(load_info)))
+			return EINVAL;
+		switch (load_info.ring_id & (I915_EXEC_RING_MASK | I915_EXEC_BSD_MASK)) {
+		case I915_EXEC_BSD | I915_EXEC_BSD_RING1:
+                       ring_id = VCS;
+                       break;
+		case I915_EXEC_BSD | I915_EXEC_BSD_RING2:
+                       ring_id = VCS2;
+                       break;
+		default:
+                       return EINVAL;
+		}
+
+		load_info.load_cnt = dev_priv->engine[ring_id]->request_stats.runnable +
+				(intel_engine_last_submit(dev_priv->engine[ring_id]) -
+				intel_engine_get_seqno(dev_priv->engine[ring_id]));
+
+		if (copy_to_user(&query->load_info[i], &load_info, sizeof(load_info)))
+			return EINVAL;
+	}
+	return 0;
+}
+
 static int i915_getparam(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv)
 {
@@ -2744,6 +2780,7 @@ static const struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_PERF_OPEN, i915_perf_open_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_PERF_ADD_CONFIG, i915_perf_add_config_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_PERF_REMOVE_CONFIG, i915_perf_remove_config_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_LOAD_BALANCING_HINT, i915_load_balancing_hint, DRM_RENDER_ALLOW),
 };
 
 static struct drm_driver driver = {
