@@ -464,7 +464,8 @@ static void i915_pmu_enable(struct perf_event *event)
 	 * Update the bitmask of enabled events and increment
 	 * the event reference counter.
 	 */
-	GEM_BUG_ON(bit >= I915_PMU_MASK_BITS);
+	BUILD_BUG_ON(ARRAY_SIZE(i915->pmu.enable_count) != I915_PMU_MASK_BITS);
+	GEM_BUG_ON(bit >= ARRAY_SIZE(i915->pmu.enable_count));
 	GEM_BUG_ON(i915->pmu.enable_count[bit] == ~0);
 	i915->pmu.enable |= BIT_ULL(bit);
 	i915->pmu.enable_count[bit]++;
@@ -488,7 +489,10 @@ static void i915_pmu_enable(struct perf_event *event)
 		GEM_BUG_ON(!engine);
 		engine->pmu.enable |= BIT(sample);
 
-		GEM_BUG_ON(sample >= I915_PMU_SAMPLE_BITS);
+		BUILD_BUG_ON(ARRAY_SIZE(engine->pmu.enable_count) !=
+			     (1 << I915_PMU_SAMPLE_BITS));
+		GEM_BUG_ON(sample >= ARRAY_SIZE(engine->pmu.enable_count));
+		GEM_BUG_ON(sample >= ARRAY_SIZE(engine->pmu.sample));
 		GEM_BUG_ON(engine->pmu.enable_count[sample] == ~0);
 		if (engine->pmu.enable_count[sample]++ == 0) {
 			/*
@@ -542,7 +546,8 @@ static void i915_pmu_disable(struct perf_event *event)
 						  engine_event_class(event),
 						  engine_event_instance(event));
 		GEM_BUG_ON(!engine);
-		GEM_BUG_ON(sample >= I915_PMU_SAMPLE_BITS);
+		GEM_BUG_ON(sample >= ARRAY_SIZE(engine->pmu.enable_count));
+		GEM_BUG_ON(sample >= ARRAY_SIZE(engine->pmu.sample));
 		GEM_BUG_ON(engine->pmu.enable_count[sample] == 0);
 		/*
 		 * Decrement the reference count and clear the enabled
@@ -570,7 +575,7 @@ static void i915_pmu_disable(struct perf_event *event)
 		}
 	}
 
-	GEM_BUG_ON(bit >= I915_PMU_MASK_BITS);
+	GEM_BUG_ON(bit >= ARRAY_SIZE(i915->pmu.enable_count));
 	GEM_BUG_ON(i915->pmu.enable_count[bit] == 0);
 	/*
 	 * Decrement the reference count and clear the enabled

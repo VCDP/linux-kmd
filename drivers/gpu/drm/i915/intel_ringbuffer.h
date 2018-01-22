@@ -260,7 +260,7 @@ struct intel_engine_cs {
 		 *
 		 * Index number corresponds to the bit number from @enable.
 		 */
-		unsigned int enable_count[I915_PMU_SAMPLE_BITS];
+		unsigned int enable_count[1 << I915_PMU_SAMPLE_BITS];
 		/**
 		 * @sample: Counter values for sampling events.
 		 *
