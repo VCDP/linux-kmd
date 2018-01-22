@@ -492,6 +492,9 @@ void __i915_gem_request_submit(struct drm_i915_gem_request *request)
 	engine->emit_breadcrumb(request,
 				request->ring->vaddr + request->postfix);
 
+	GEM_BUG_ON(engine->request_stats.runnable == 0);
+	engine->request_stats.runnable--;
+
 	spin_lock(&request->timeline->lock);
 	list_move_tail(&request->link, &timeline->requests);
 	spin_unlock(&request->timeline->lock);
@@ -506,6 +509,8 @@ void i915_gem_request_submit(struct drm_i915_gem_request *request)
 
 	/* Will be called from irq-context when using foreign fences. */
 	spin_lock_irqsave(&engine->timeline->lock, flags);
+
+	engine->request_stats.runnable++;
 
 	__i915_gem_request_submit(request);
 
@@ -536,6 +541,8 @@ void __i915_gem_request_unsubmit(struct drm_i915_gem_request *request)
 	/* Transfer back from the global per-engine timeline to per-context */
 	timeline = request->timeline;
 	GEM_BUG_ON(timeline == engine->timeline);
+
+	engine->request_stats.runnable++;
 
 	spin_lock(&timeline->lock);
 	list_move(&request->link, &timeline->requests);

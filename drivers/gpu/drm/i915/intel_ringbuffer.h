@@ -205,6 +205,15 @@ struct intel_engine_cs {
 	struct intel_ring *buffer;
 	struct intel_timeline *timeline;
 
+	struct {
+		/**
+		 * @runnable: Number of runnable requests sent to the backend.
+		 *
+		 * Count of requests waiting for the GPU to execute them.
+		 */
+		unsigned int runnable;
+	} request_stats;
+
 	struct intel_render_state *render_state;
 
 	atomic_t irq_count;

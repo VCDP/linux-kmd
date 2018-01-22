@@ -714,6 +714,8 @@ static void execlists_submit_request(struct drm_i915_gem_request *request)
 	/* Will be called from irq-context when using foreign fences. */
 	spin_lock_irqsave(&engine->timeline->lock, flags);
 
+	engine->request_stats.runnable++;
+
 	if (insert_request(engine,
 			   &request->priotree,
 			   request->priotree.priority)) {
