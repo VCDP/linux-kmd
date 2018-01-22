@@ -579,6 +579,7 @@ submit_notify(struct i915_sw_fence *fence, enum i915_sw_fence_notify state)
 	case FENCE_COMPLETE:
 		trace_i915_gem_request_submit(request);
 		request->engine->submit_request(request);
+		atomic_dec(&request->engine->request_stats.queued);
 		break;
 
 	case FENCE_FREE:
@@ -1005,6 +1006,8 @@ void __i915_add_request(struct drm_i915_gem_request *request, bool flush_caches)
 	 */
 	if (engine->schedule)
 		engine->schedule(request, request->ctx->priority);
+
+	atomic_inc(&engine->request_stats.queued);
 
 	local_bh_disable();
 	i915_sw_fence_commit(&request->submit);

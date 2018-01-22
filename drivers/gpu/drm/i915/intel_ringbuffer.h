@@ -207,6 +207,14 @@ struct intel_engine_cs {
 
 	struct {
 		/**
+		 * @queued: Number of submitted requests with dependencies.
+		 *
+		 * Count of requests waiting for dependencies before they can be
+		 * submitted to the backend.
+		 */
+		atomic_t queued;
+
+		/**
 		 * @runnable: Number of runnable requests sent to the backend.
 		 *
 		 * Count of requests waiting for the GPU to execute them.
