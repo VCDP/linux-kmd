@@ -38,7 +38,8 @@
 	 BIT(I915_SAMPLE_WAIT) | \
 	 BIT(I915_SAMPLE_SEMA) | \
 	 BIT(I915_SAMPLE_QUEUED) | \
-	 BIT(I915_SAMPLE_RUNNABLE))
+	 BIT(I915_SAMPLE_RUNNABLE) | \
+	 BIT(I915_SAMPLE_RUNNING))
 
 #define ENGINE_SAMPLE_BITS (1 << I915_PMU_SAMPLE_BITS)
 
@@ -235,6 +236,11 @@ static void engines_sample(struct drm_i915_private *dev_priv)
 			update_sample(&engine->pmu.sample[I915_SAMPLE_RUNNABLE],
 				      I915_SAMPLE_RUNNABLE_DIVISOR,
 				      engine->request_stats.runnable);
+
+		if (engine->pmu.enable & BIT(I915_SAMPLE_RUNNING))
+			update_sample(&engine->pmu.sample[I915_SAMPLE_RUNNING],
+				      I915_SAMPLE_RUNNING_DIVISOR,
+				      last_seqno - current_seqno);
 	}
 
 	if (fw)
@@ -319,6 +325,7 @@ static int engine_event_init(struct perf_event *event)
 	case I915_SAMPLE_WAIT:
 	case I915_SAMPLE_QUEUED:
 	case I915_SAMPLE_RUNNABLE:
+	case I915_SAMPLE_RUNNING:
 		break;
 	case I915_SAMPLE_SEMA:
 		if (INTEL_GEN(i915) < 6)
@@ -411,7 +418,8 @@ static u64 __i915_pmu_event_read(struct perf_event *event)
 		}
 
 		if (sample == I915_SAMPLE_QUEUED ||
-		    sample == I915_SAMPLE_RUNNABLE)
+		    sample == I915_SAMPLE_RUNNABLE ||
+		    sample == I915_SAMPLE_RUNNING)
 			val = div_u64(val, FREQUENCY);
 	} else {
 		switch (event->attr.config) {
@@ -709,7 +717,8 @@ static ssize_t i915_pmu_event_show(struct device *dev,
 	I915_ENGINE_EVENT(_name##_instance-sema, _class, _instance, I915_SAMPLE_SEMA), \
 	I915_ENGINE_EVENT(_name##_instance-wait, _class, _instance, I915_SAMPLE_WAIT), \
 	I915_ENGINE_EVENT(_name##_instance-queued, _class, _instance, I915_SAMPLE_QUEUED), \
-	I915_ENGINE_EVENT(_name##_instance-runnable, _class, _instance, I915_SAMPLE_RUNNABLE)
+	I915_ENGINE_EVENT(_name##_instance-runnable, _class, _instance, I915_SAMPLE_RUNNABLE), \
+	I915_ENGINE_EVENT(_name##_instance-running, _class, _instance, I915_SAMPLE_RUNNING)
 
 static struct attribute *i915_pmu_events_attrs[] = {
 	I915_ENGINE_EVENTS(rcs, I915_ENGINE_CLASS_RENDER, 0),
