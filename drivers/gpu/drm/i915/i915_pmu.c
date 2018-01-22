@@ -36,7 +36,8 @@
 #define ENGINE_SAMPLE_MASK \
 	(BIT(I915_SAMPLE_BUSY) | \
 	 BIT(I915_SAMPLE_WAIT) | \
-	 BIT(I915_SAMPLE_SEMA))
+	 BIT(I915_SAMPLE_SEMA) | \
+	 BIT(I915_SAMPLE_QUEUED))
 
 #define ENGINE_SAMPLE_BITS (1 << I915_PMU_SAMPLE_BITS)
 
@@ -223,6 +224,11 @@ static void engines_sample(struct drm_i915_private *dev_priv)
 
 		update_sample(&engine->pmu.sample[I915_SAMPLE_SEMA],
 			      PERIOD, !!(val & RING_WAIT_SEMAPHORE));
+
+		if (engine->pmu.enable & BIT(I915_SAMPLE_QUEUED))
+			update_sample(&engine->pmu.sample[I915_SAMPLE_QUEUED],
+				      I915_SAMPLE_QUEUED_DIVISOR,
+				      atomic_read(&engine->request_stats.queued));
 	}
 
 	if (fw)
@@ -305,6 +311,7 @@ static int engine_event_init(struct perf_event *event)
 	switch (engine_event_sample(event)) {
 	case I915_SAMPLE_BUSY:
 	case I915_SAMPLE_WAIT:
+	case I915_SAMPLE_QUEUED:
 		break;
 	case I915_SAMPLE_SEMA:
 		if (INTEL_GEN(i915) < 6)
@@ -395,6 +402,9 @@ static u64 __i915_pmu_event_read(struct perf_event *event)
 		} else {
 			val = engine->pmu.sample[sample].cur;
 		}
+
+		if (sample == I915_SAMPLE_QUEUED)
+			val = div_u64(val, FREQUENCY);
 	} else {
 		switch (event->attr.config) {
 		case I915_PMU_ACTUAL_FREQUENCY:
@@ -689,7 +699,8 @@ static ssize_t i915_pmu_event_show(struct device *dev,
 #define I915_ENGINE_EVENTS(_name, _class, _instance) \
 	I915_ENGINE_EVENT(_name##_instance-busy, _class, _instance, I915_SAMPLE_BUSY), \
 	I915_ENGINE_EVENT(_name##_instance-sema, _class, _instance, I915_SAMPLE_SEMA), \
-	I915_ENGINE_EVENT(_name##_instance-wait, _class, _instance, I915_SAMPLE_WAIT)
+	I915_ENGINE_EVENT(_name##_instance-wait, _class, _instance, I915_SAMPLE_WAIT), \
+	I915_ENGINE_EVENT(_name##_instance-queued, _class, _instance, I915_SAMPLE_QUEUED)
 
 static struct attribute *i915_pmu_events_attrs[] = {
 	I915_ENGINE_EVENTS(rcs, I915_ENGINE_CLASS_RENDER, 0),

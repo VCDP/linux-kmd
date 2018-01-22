@@ -110,8 +110,12 @@ enum drm_i915_gem_engine_class {
 enum drm_i915_pmu_engine_sample {
 	I915_SAMPLE_BUSY = 0,
 	I915_SAMPLE_WAIT = 1,
-	I915_SAMPLE_SEMA = 2
+	I915_SAMPLE_SEMA = 2,
+	I915_SAMPLE_QUEUED = 3
 };
+
+ /* Divide counter value by divisor to get the real value. */
+#define I915_SAMPLE_QUEUED_DIVISOR (100)
 
 #define I915_PMU_SAMPLE_BITS (4)
 #define I915_PMU_SAMPLE_MASK (0xf)
@@ -132,6 +136,9 @@ enum drm_i915_pmu_engine_sample {
 
 #define I915_PMU_ENGINE_SEMA(class, instance) \
 	__I915_PMU_ENGINE(class, instance, I915_SAMPLE_SEMA)
+
+#define I915_PMU_ENGINE_QUEUED(class, instance) \
+	__I915_PMU_ENGINE(class, instance, I915_SAMPLE_QUEUED)
 
 #define __I915_PMU_OTHER(x) (__I915_PMU_ENGINE(0xff, 0xff, 0xf) + 1 + (x))
 
