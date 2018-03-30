@@ -91,4 +91,7 @@ u64 intel_lr_context_get_sseu(struct i915_gem_context *ctx,
 int intel_sanitize_enable_execlists(struct drm_i915_private *dev_priv,
 				    int enable_execlists);
 
+int intel_lr_context_modify_data_port_coherency(struct drm_i915_gem_request *req,
+						bool enable);
+
 #endif /* _INTEL_LRC_H_ */

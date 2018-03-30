@@ -515,6 +515,11 @@ typedef struct drm_i915_irq_wait {
  */
 #define I915_PARAM_HAS_EXEC_FENCE_ARRAY  49
 
+/* Query whether DRM_I915_GEM_EXECBUFFER2 supports the ability to switch
+ * Data Cache access into Data Port Coherency mode.
+ */
+#define I915_PARAM_HAS_EXEC_DATA_PORT_COHERENCY 52
+
 typedef struct drm_i915_getparam {
 	__s32 param;
 	/*
@@ -1034,7 +1039,12 @@ struct drm_i915_gem_execbuffer2 {
  */
 #define I915_EXEC_FENCE_ARRAY   (1<<19)
 
-#define __I915_EXEC_UNKNOWN_FLAGS (-(I915_EXEC_FENCE_ARRAY<<1))
+/* Data Port Coherency capability will be switched before an exec call
+ * which has this flag different than previous call for the context.
+ */
+#define I915_EXEC_DATA_PORT_COHERENT   (1<<20)
+
+#define __I915_EXEC_UNKNOWN_FLAGS (-(I915_EXEC_DATA_PORT_COHERENT<<1))
 
 #define I915_EXEC_CONTEXT_ID_MASK	(0xffffffff)
 #define i915_execbuffer2_set_context_id(eb2, context) \

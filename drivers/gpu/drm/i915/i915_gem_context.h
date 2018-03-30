@@ -134,6 +134,7 @@ struct i915_gem_context {
 #define CONTEXT_BANNABLE		3
 #define CONTEXT_BANNED			4
 #define CONTEXT_FORCE_SINGLE_SUBMISSION	5
+#define CONTEXT_DATA_PORT_COHERENT	6
 #define CONTEXT_BOOST_FREQ             BIT(31)
 
 	/**

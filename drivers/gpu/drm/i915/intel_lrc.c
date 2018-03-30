@@ -286,6 +286,57 @@ intel_lr_context_descriptor_update(struct i915_gem_context *ctx,
 	ce->lrc_desc = desc;
 }
 
+static int emit_set_data_port_coherency(struct drm_i915_gem_request *req, bool enable)
+{
+	u32 *cs;
+	i915_reg_t reg;
+
+	GEM_BUG_ON(req->engine->class != RENDER_CLASS);
+	GEM_BUG_ON(INTEL_GEN(req->i915) < 9);
+
+	cs = intel_ring_begin(req, 4);
+	if (IS_ERR(cs))
+		return PTR_ERR(cs);
+
+	reg = HDC_CHICKEN0;
+
+	*cs++ = MI_LOAD_REGISTER_IMM(1);
+	*cs++ = i915_mmio_reg_offset(reg);
+	/* Enabling coherency means disabling the bit which forces it off */
+	if (enable)
+		*cs++ = _MASKED_BIT_DISABLE(HDC_FORCE_NON_COHERENT);
+	else
+		*cs++ = _MASKED_BIT_ENABLE(HDC_FORCE_NON_COHERENT);
+	*cs++ = MI_NOOP;
+
+	intel_ring_advance(req, cs);
+
+	return 0;
+}
+
+int
+intel_lr_context_modify_data_port_coherency(struct drm_i915_gem_request *req,
+					bool enable)
+{
+	struct i915_gem_context *ctx = req->ctx;
+	int ret;
+
+	if (test_bit(CONTEXT_DATA_PORT_COHERENT, &ctx->flags) == enable)
+		return 0;
+
+	ret = emit_set_data_port_coherency(req, enable);
+
+	if (!ret) {
+		if (enable)
+			__set_bit(CONTEXT_DATA_PORT_COHERENT, &ctx->flags);
+		else
+			__clear_bit(CONTEXT_DATA_PORT_COHERENT, &ctx->flags);
+	}
+
+	return ret;
+}
+
+
 uint64_t intel_lr_context_descriptor(struct i915_gem_context *ctx,
 				     struct intel_engine_cs *engine)
 {

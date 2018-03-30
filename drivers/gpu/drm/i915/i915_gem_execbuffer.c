@@ -2241,6 +2241,18 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 		eb.batch_flags |= I915_DISPATCH_RS;
 	}
 
+	if (args->flags & I915_EXEC_DATA_PORT_COHERENT) {
+		if (INTEL_GEN(eb.i915) < 9) {
+			DRM_DEBUG("Data Port Coherency is only allowed for Gen9 and above\n");
+			return -EINVAL;
+		}
+		if (eb.engine->class != RENDER_CLASS) {
+			DRM_DEBUG("Data Port Coherency is not available on %s\n",
+				 eb.engine->name);
+			return -EINVAL;
+		}
+	}
+
 	if (args->flags & I915_EXEC_FENCE_IN) {
 		in_fence = sync_file_get_fence(lower_32_bits(args->rsvd2));
 		if (!in_fence)
@@ -2366,6 +2378,11 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 		err = PTR_ERR(eb.request);
 		goto err_batch_unpin;
 	}
+
+	/* Emit the switch of data port coherency state if needed */
+	err = intel_lr_context_modify_data_port_coherency(eb.request,
+			(args->flags & I915_EXEC_DATA_PORT_COHERENT) != 0);
+	GEM_WARN_ON(err);
 
 	if (in_fence) {
 		err = i915_gem_request_await_dma_fence(eb.request, in_fence);

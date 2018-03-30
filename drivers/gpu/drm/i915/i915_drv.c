@@ -443,6 +443,9 @@ static int i915_getparam(struct drm_device *dev, void *data,
 		if (!value)
 			return -ENODEV;
 		break;
+	case I915_PARAM_HAS_EXEC_DATA_PORT_COHERENCY:
+		value = (INTEL_GEN(dev_priv) >= 9);
+		break;
 	default:
 		DRM_DEBUG("Unknown parameter %d\n", param->param);
 		return -EINVAL;
