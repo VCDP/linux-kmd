@@ -1405,21 +1405,14 @@ static void reset_common_ring(struct intel_engine_cs *engine,
 	 * requests were completed.
 	 */
 	if (!request) {
-		for (n = 0; n < ARRAY_SIZE(engine->execlist_port); n++) {
-			struct drm_i915_gem_request *rq = port_request(&port[n]);
-
-			intel_engine_context_out(rq->engine);
-			i915_gem_request_put(rq);
-		}
+		for (n = 0; n < ARRAY_SIZE(engine->execlist_port); n++)
+			i915_gem_request_put(port_request(&port[n]));
 		memset(engine->execlist_port, 0, sizeof(engine->execlist_port));
 		return;
 	}
 
 	if (request->ctx != port_request(port)->ctx) {
-		struct drm_i915_gem_request *rq = port_request(&port[n]);
-
-		intel_engine_context_out(rq->engine);
-		i915_gem_request_put(rq);
+		i915_gem_request_put(port_request(port));
 		port[0] = port[1];
 		memset(&port[1], 0, sizeof(port[1]));
 	}
