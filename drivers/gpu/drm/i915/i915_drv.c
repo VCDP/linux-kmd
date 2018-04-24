@@ -299,7 +299,8 @@ static int i915_load_balancing_hint(struct drm_device *dev, void *data,
                        return EINVAL;
 		}
 
-		load_info.load_cnt = dev_priv->engine[ring_id]->request_stats.runnable +
+		load_info.load_cnt = atomic_read(&dev_priv->engine[ring_id]->request_stats.queued) +
+				dev_priv->engine[ring_id]->request_stats.runnable +
 				(intel_engine_last_submit(dev_priv->engine[ring_id]) -
 				intel_engine_get_seqno(dev_priv->engine[ring_id]));
 
