@@ -2382,7 +2382,8 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 	/* Emit the switch of data port coherency state if needed */
 	err = intel_lr_context_modify_data_port_coherency(eb.request,
 			(args->flags & I915_EXEC_DATA_PORT_COHERENT) != 0);
-	GEM_WARN_ON(err);
+	if (GEM_WARN_ON(err))
+		DRM_DEBUG("Data Port Coherency toggle failed, keeping old setting.\n");
 
 	if (in_fence) {
 		err = i915_gem_request_await_dma_fence(eb.request, in_fence);
