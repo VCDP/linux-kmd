@@ -1411,13 +1411,18 @@ static void reset_common_ring(struct intel_engine_cs *engine,
 		return;
 	}
 
-	if (request->ctx != port_request(port)->ctx) {
-		i915_gem_request_put(port_request(port));
-		port[0] = port[1];
-		memset(&port[1], 0, sizeof(port[1]));
-	}
+	/* if the request in ELSP had been processed after GPU finished
+	 * HW reset, this GPU reset occur when a forced request.
+	 * */
+	if (port_request(port)) {
+		if (request->ctx != port_request(port)->ctx) {
+			i915_gem_request_put(port_request(port));
+			port[0] = port[1];
+			memset(&port[1], 0, sizeof(port[1]));
+		}
 
-	GEM_BUG_ON(request->ctx != port_request(port)->ctx);
+		GEM_BUG_ON(request->ctx != port_request(port)->ctx);
+	}
 
 	/* If the request was innocent, we leave the request in the ELSP
 	 * and will try to replay it on restarting. The context image may

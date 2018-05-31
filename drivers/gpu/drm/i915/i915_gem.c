@@ -3058,8 +3058,10 @@ static void engine_set_wedged(struct intel_engine_cs *engine)
 		for (n = 0; n < ARRAY_SIZE(engine->execlist_port); n++) {
 			struct drm_i915_gem_request *rq = port_request(&port[n]);
 
-			intel_engine_context_out(rq->engine);
-			i915_gem_request_put(rq);
+			if(rq) {
+				intel_engine_context_out(rq->engine);
+				i915_gem_request_put(rq);
+			}
 		}
 		memset(engine->execlist_port, 0, sizeof(engine->execlist_port));
 		engine->execlist_queue = RB_ROOT;
