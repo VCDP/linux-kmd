@@ -1330,7 +1330,7 @@ restart:
 			goto complete;
 		}
 
-		timeout = io_schedule_timeout(timeout);
+		timeout = schedule_timeout(timeout);
 	} while (1);
 
 	GEM_BUG_ON(!intel_wait_has_seqno(&wait));
@@ -1363,7 +1363,7 @@ restart:
 			break;
 		}
 
-		timeout = io_schedule_timeout(timeout);
+		timeout = schedule_timeout(timeout);
 
 		if (intel_wait_complete(&wait) &&
 		    intel_wait_check_request(&wait, rq))
