@@ -1,0 +1,22 @@
+PONTE VECCHIO PLATFORM ENABLING (done)
+D:	Stuart Summers <stuart.summers@intel.com>
+M:	Sudeep Dutt <sudeep.dutt@intel.com>
+T:	drm/i915/pvc
+
+PONTE VECCHIO FEATURES (done)
+D:	Niranjana Vishwanathapura <niranjana.vishwanathapura@intel.com>
+D:	Prathap Kumar Valsan <prathap.kumar.valsan@intel.com>
+D:	Sandeep Dhanalakota <venkata.s.dhanalakota@intel.com>
+M:	Sudeep Dutt <sudeep.dutt@intel.com>
+T:	drm/i915/pvc
+T:	drm/i915/svm
+
+PONTE VECCHIO SIMULATION (done)
+D:	Stuart Summers <stuart.summers@intel.com>
+M:	Sudeep Dutt <sudeep.dutt@intel.com>
+T:	drm/i915/pvc/sim
+
+PONTE VECCHIO EMULATION (done)
+D:	Stuart Summers <stuart.summers@intel.com>
+M:	Sudeep Dutt <sudeep.dutt@intel.com>
+T:	drm/i915/pvc/emu

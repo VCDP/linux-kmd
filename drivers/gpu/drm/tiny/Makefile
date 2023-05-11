@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+obj-$(CPTCFG_DRM_GM12U320)		+= gm12u320.o
+obj-$(CPTCFG_TINYDRM_HX8357D)		+= hx8357d.o
+obj-$(CPTCFG_TINYDRM_ILI9225)		+= ili9225.o
+obj-$(CPTCFG_TINYDRM_ILI9341)		+= ili9341.o
+obj-$(CPTCFG_TINYDRM_MI0283QT)		+= mi0283qt.o
+obj-$(CPTCFG_TINYDRM_REPAPER)		+= repaper.o
+obj-$(CPTCFG_TINYDRM_ST7586)		+= st7586.o
+obj-$(CPTCFG_TINYDRM_ST7735R)		+= st7735r.o
