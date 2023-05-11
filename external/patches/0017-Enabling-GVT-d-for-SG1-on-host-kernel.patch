@@ -1,0 +1,121 @@
+From ea18337ae205266f28a2ab07bc1376f30bacdef4 Mon Sep 17 00:00:00 2001
+From: kwen <kui.wen@intel.com>
+Date: Thu, 10 Jun 2021 10:29:51 +0800
+Subject: [PATCH 17/18] Enabling GVT-d for SG1 on host kernel
+
+Signed-off-by: kwen <kui.wen@intel.com>
+---
+ drivers/pci/quirks.c        | 24 ++++++++++++++++++++++++
+ drivers/vfio/pci/vfio_pci.c | 11 ++++++++++-
+ include/drm/i915_pciids.h   |  5 +++++
+ 3 files changed, 39 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/pci/quirks.c b/drivers/pci/quirks.c
+index 8e48669..607a1042 100644
+--- a/drivers/pci/quirks.c
++++ b/drivers/pci/quirks.c
+@@ -30,6 +30,7 @@
+ #include <linux/pm_runtime.h>
+ #include <linux/switchtec.h>
+ #include <asm/dma.h>	/* isa_dma_bridge_buggy */
++#include <drm/i915_pciids.h>
+ #include "pci.h"
+ 
+ static ktime_t fixup_debug_start(struct pci_dev *dev,
+@@ -3776,6 +3777,14 @@ static int nvme_disable_and_flr(struct pci_dev *dev, int probe)
+ }
+ 
+ /*
++ * Let's redefine INTEL_VGA_DEVICE to use the IDs as an x-macro to allow
++ * defining our own table
++ */
++#undef INTEL_VGA_DEVICE
++#define INTEL_VGA_DEVICE(id, func) \
++       { PCI_VENDOR_ID_INTEL, id, func }
++
++/*
+  * Intel DC P3700 NVMe controller will timeout waiting for ready status
+  * to change after NVMe enable if the driver starts interacting with the
+  * device too soon after FLR.  A 250ms delay after FLR has heuristically
+@@ -3796,6 +3805,20 @@ static int delay_250ms_after_flr(struct pci_dev *dev, int probe)
+ 	return 0;
+ }
+ 
++static int delay_500ms_after_flr(struct pci_dev *dev, int probe)
++{
++        if (!pcie_has_flr(dev))
++                return -ENOTTY;
++
++        if (probe)
++                return 0;
++
++        pcie_flr(dev);
++
++        msleep(500);
++
++        return 0;
++}
+ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
+ 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82599_SFP_VF,
+ 		 reset_intel_82599_sfp_virtfn },
+@@ -3805,6 +3828,7 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
+ 		reset_ivb_igd },
+ 	{ PCI_VENDOR_ID_SAMSUNG, 0xa804, nvme_disable_and_flr },
+ 	{ PCI_VENDOR_ID_INTEL, 0x0953, delay_250ms_after_flr },
++	INTEL_DG1_IDS(delay_500ms_after_flr),
+ 	{ PCI_VENDOR_ID_CHELSIO, PCI_ANY_ID,
+ 		reset_chelsio_generic_dev },
+ 	{ 0 }
+diff --git a/drivers/vfio/pci/vfio_pci.c b/drivers/vfio/pci/vfio_pci.c
+index 66783a3..580e8b3 100644
+--- a/drivers/vfio/pci/vfio_pci.c
++++ b/drivers/vfio/pci/vfio_pci.c
+@@ -29,6 +29,7 @@
+ #include <linux/vfio.h>
+ #include <linux/vgaarb.h>
+ #include <linux/nospec.h>
++#include <drm/i915_pciids.h>
+ 
+ #include "vfio_pci_private.h"
+ 
+@@ -211,6 +212,13 @@ static bool vfio_pci_nointx(struct pci_dev *pdev)
+ 	return false;
+ }
+ 
++/* Intel's dgfx is not IGD, so don't handle them the same way */
++static const struct pci_device_id intel_dgfx_pciids[] = {
++       INTEL_DG1_IDS(0),
++       { }
++};
++
++
+ static int vfio_pci_enable(struct vfio_pci_device *vdev)
+ {
+ 	struct pci_dev *pdev = vdev->pdev;
+@@ -284,7 +292,8 @@ static int vfio_pci_enable(struct vfio_pci_device *vdev)
+ 
+ 	if (vfio_pci_is_vga(pdev) &&
+ 	    pdev->vendor == PCI_VENDOR_ID_INTEL &&
+-	    IS_ENABLED(CONFIG_VFIO_PCI_IGD)) {
++	    IS_ENABLED(CONFIG_VFIO_PCI_IGD) &&
++		!pci_match_id(intel_dgfx_pciids, pdev)) {
+ 		ret = vfio_pci_igd_init(vdev);
+ 		if (ret) {
+ 			dev_warn(&vdev->pdev->dev,
+diff --git a/include/drm/i915_pciids.h b/include/drm/i915_pciids.h
+index fd965ff..dcb3f2b 100644
+--- a/include/drm/i915_pciids.h
++++ b/include/drm/i915_pciids.h
+@@ -458,4 +458,9 @@
+ 	INTEL_VGA_DEVICE(0x8A71, info), \
+ 	INTEL_VGA_DEVICE(0x8A70, info)
+ 
++#define INTEL_DG1_IDS(info) \
++        INTEL_VGA_DEVICE(0x4905, info), \
++        INTEL_VGA_DEVICE(0x4906, info), \
++        INTEL_VGA_DEVICE(0x4907, info)
++
+ #endif /* _I915_PCIIDS_H */
+-- 
+1.8.3.1
+

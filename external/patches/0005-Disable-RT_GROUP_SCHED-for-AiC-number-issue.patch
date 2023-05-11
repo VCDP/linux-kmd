@@ -1,0 +1,26 @@
+From 655b11f6f5fac46ed14ded12f9af9eff11a039f6 Mon Sep 17 00:00:00 2001
+From: kwen <kui.wen@intel.com>
+Date: Fri, 23 Jul 2021 12:56:27 +0800
+Subject: [PATCH 05/18] Disable RT_GROUP_SCHED for AiC number issue
+
+Signed-off-by: kwen <kui.wen@intel.com>
+---
+ arch/x86/configs/x86_64_sg1_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/x86/configs/x86_64_sg1_defconfig b/arch/x86/configs/x86_64_sg1_defconfig
+index ccec168..e0e790a 100644
+--- a/arch/x86/configs/x86_64_sg1_defconfig
++++ b/arch/x86/configs/x86_64_sg1_defconfig
+@@ -139,7 +139,7 @@ CONFIG_CGROUP_WRITEBACK=y
+ CONFIG_CGROUP_SCHED=y
+ CONFIG_FAIR_GROUP_SCHED=y
+ CONFIG_CFS_BANDWIDTH=y
+-CONFIG_RT_GROUP_SCHED=y
++CONFIG_RT_GROUP_SCHED=n
+ CONFIG_CGROUP_PIDS=y
+ CONFIG_CGROUP_RDMA=y
+ CONFIG_CGROUP_FREEZER=y
+-- 
+1.8.3.1
+

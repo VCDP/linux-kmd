@@ -1,0 +1,2802 @@
+From 49963eb705ea1e83e7077d985b58f0ca001bf82a Mon Sep 17 00:00:00 2001
+From: "Xu, Guoshu" <Guoshu.Xu@intel.com>
+Date: Wed, 26 Aug 2020 21:54:32 +0800
+Subject: [PATCH 03/18] portting mei and fix some build issues
+
+---
+ drivers/misc/mei/Kconfig       |   5 +-
+ drivers/misc/mei/Makefile      |   5 +-
+ drivers/misc/mei/bus-fixup.c   |  31 +++--
+ drivers/misc/mei/bus.c         |  33 +----
+ drivers/misc/mei/client.c      | 116 ++++++++++--------
+ drivers/misc/mei/client.h      |  14 +--
+ drivers/misc/mei/debugfs.c     | 238 ++++++++++--------------------------
+ drivers/misc/mei/dma-ring.c    | 269 +++++++++++++++++++++++++++++++++++++++++
+ drivers/misc/mei/hbm.c         | 113 ++++++++++++++---
+ drivers/misc/mei/hbm.h         |  16 +--
+ drivers/misc/mei/hw-me-regs.h  |  84 +------------
+ drivers/misc/mei/hw-me.c       | 100 +++++++--------
+ drivers/misc/mei/hw-me.h       |  28 ++---
+ drivers/misc/mei/hw-txe-regs.h |  63 +---------
+ drivers/misc/mei/hw-txe.c      |  16 +--
+ drivers/misc/mei/hw-txe.h      |  14 +--
+ drivers/misc/mei/hw.h          |  26 ++--
+ drivers/misc/mei/init.c        |  38 +++---
+ drivers/misc/mei/interrupt.c   |  56 +++++----
+ drivers/misc/mei/main.c        | 100 +++++++++------
+ drivers/misc/mei/mei-trace.c   |  14 +--
+ drivers/misc/mei/mei-trace.h   |  14 +--
+ drivers/misc/mei/mei_dev.h     |  87 +++++++++----
+ drivers/misc/mei/pci-me.c      |  45 +++----
+ drivers/misc/mei/pci-txe.c     |  34 ++----
+ 25 files changed, 809 insertions(+), 750 deletions(-)
+ create mode 100644 drivers/misc/mei/dma-ring.c
+
+diff --git a/drivers/misc/mei/Kconfig b/drivers/misc/mei/Kconfig
+index 7353f5b..5712cce 100644
+--- a/drivers/misc/mei/Kconfig
++++ b/drivers/misc/mei/Kconfig
+@@ -1,3 +1,5 @@
++# SPDX-License-Identifier: GPL-2.0
++# Copyright (c) 2003-2019, Intel Corporation. All rights reserved.
+ config INTEL_MEI
+ 	tristate "Intel Management Engine Interface"
+ 	depends on X86 && PCI
+@@ -44,6 +46,7 @@ config INTEL_MEI_TXE
+ 	  Supported SoCs:
+ 	  Intel Bay Trail
+ 
++source "drivers/misc/mei/hdcp/Kconfig"
+ config INTEL_MEI_GSC
+ 	tristate "Intel MEI GSC embedded device"
+ 	select INTEL_MEI
+@@ -56,5 +59,3 @@ config INTEL_MEI_GSC
+ 	  MEI device can be embedded in a standalone Intel graphics devices,
+ 	  to support range of security tasks.
+ 	  Currently supported devices are DG1 and GSC.
+-
+-source "drivers/misc/mei/hdcp/Kconfig"
+diff --git a/drivers/misc/mei/Makefile b/drivers/misc/mei/Makefile
+index 6984ead..8564301 100644
+--- a/drivers/misc/mei/Makefile
++++ b/drivers/misc/mei/Makefile
+@@ -1,7 +1,7 @@
+ # SPDX-License-Identifier: GPL-2.0
+ #
++# Copyright (c) 2010-2019, Intel Corporation. All rights reserved.
+ # Makefile - Intel Management Engine Interface (Intel MEI) Linux driver
+-# Copyright (c) 2010-2014, Intel Corporation.
+ #
+ obj-$(CONFIG_INTEL_MEI) += mei.o
+ mei-objs := init.o
+@@ -9,6 +9,7 @@ mei-objs += hbm.o
+ mei-objs += interrupt.o
+ mei-objs += client.o
+ mei-objs += main.o
++mei-objs += dma-ring.o
+ mei-objs += bus.o
+ mei-objs += bus-fixup.o
+ mei-$(CONFIG_DEBUG_FS) += debugfs.o
+@@ -26,3 +27,5 @@ mei-txe-objs += hw-txe.o
+ 
+ mei-$(CONFIG_EVENT_TRACING) += mei-trace.o
+ CFLAGS_mei-trace.o = -I$(src)
++
++#obj-$(CONFIG_INTEL_MEI_HDCP) += hdcp/
+diff --git a/drivers/misc/mei/bus-fixup.c b/drivers/misc/mei/bus-fixup.c
+index 0201681..488a47c 100644
+--- a/drivers/misc/mei/bus-fixup.c
++++ b/drivers/misc/mei/bus-fixup.c
+@@ -1,23 +1,12 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
++ * Copyright (c) 2013-2019, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2018, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+ #include <linux/kernel.h>
+ #include <linux/sched.h>
+ #include <linux/module.h>
+-#include <linux/moduleparam.h>
+ #include <linux/device.h>
+ #include <linux/slab.h>
+ #include <linux/uuid.h>
+@@ -41,6 +30,9 @@ static const uuid_le mei_nfc_info_guid = MEI_UUID_NFC_INFO;
+ #define MEI_UUID_MKHIF_FIX UUID_LE(0x55213584, 0x9a29, 0x4916, \
+ 			0xba, 0xdf, 0xf, 0xb7, 0xed, 0x68, 0x2a, 0xeb)
+ 
++#define MEI_UUID_HDCP UUID_LE(0xB638AB7E, 0x94E2, 0x4EA2, \
++			      0xA5, 0x52, 0xD1, 0xC5, 0x4B, 0x62, 0x7F, 0x04)
++
+ #define MEI_UUID_ANY NULL_UUID_LE
+ 
+ /**
+@@ -72,6 +64,18 @@ static void blacklist(struct mei_cl_device *cldev)
+ 	cldev->do_match = 0;
+ }
+ 
++/**
++ * whitelist - forcefully whitelist client
++ *
++ * @cldev: me clients device
++ */
++static void whitelist(struct mei_cl_device *cldev)
++{
++	dev_dbg(&cldev->dev, "running hook %s\n", __func__);
++
++	cldev->do_match = 1;
++}
++
+ #define OSTYPE_LINUX    2
+ struct mei_os_ver {
+ 	__le16 build;
+@@ -481,6 +485,7 @@ static struct mei_fixup {
+ 	MEI_FIXUP(MEI_UUID_NFC_HCI, mei_nfc),
+ 	MEI_FIXUP(MEI_UUID_WD, mei_wd),
+ 	MEI_FIXUP(MEI_UUID_MKHIF_FIX, mei_mkhi_fix),
++	MEI_FIXUP(MEI_UUID_HDCP, whitelist),
+ };
+ 
+ /**
+diff --git a/drivers/misc/mei/bus.c b/drivers/misc/mei/bus.c
+index 6281949..f476dbc 100644
+--- a/drivers/misc/mei/bus.c
++++ b/drivers/misc/mei/bus.c
+@@ -1,16 +1,7 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
++ * Copyright (c) 2012-2019, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2012-2013, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+ #include <linux/module.h>
+@@ -28,7 +19,6 @@
+ #include "client.h"
+ 
+ #define to_mei_cl_driver(d) container_of(d, struct mei_cl_driver, driver)
+-#define to_mei_cl_device(d) container_of(d, struct mei_cl_device, dev)
+ 
+ /**
+  * __mei_cl_send - internal client send (write)
+@@ -997,26 +987,13 @@ static bool mei_cl_bus_dev_setup(struct mei_device *bus,
+ static int mei_cl_bus_dev_add(struct mei_cl_device *cldev)
+ {
+ 	int ret;
+-        struct device *clsdev = cldev->bus->clsdev;
+-
+-        if (!clsdev)
+-                return -ENODEV;
+ 
+ 	dev_dbg(cldev->bus->dev, "adding %pUL:%02X\n",
+ 		mei_me_cl_uuid(cldev->me_cl),
+ 		mei_me_cl_ver(cldev->me_cl));
+ 	ret = device_add(&cldev->dev);
+-
+-	if (ret)
+-		return ret;
+-
+-        ret = sysfs_create_link_nowarn(&cldev->dev.kobj, &clsdev->kobj, "mei");
+-        if (ret) {
+-                device_del(&cldev->dev);
+-                return ret;
+-        }
+- 
+-        cldev->is_added = 1;
++	if (!ret)
++		cldev->is_added = 1;
+ 
+ 	return ret;
+ }
+@@ -1046,7 +1023,7 @@ static void mei_cl_bus_dev_destroy(struct mei_cl_device *cldev)
+ 
+ 	if (!cldev->is_added)
+ 		return;
+-	sysfs_remove_link(&cldev->dev.kobj, "mei");
++
+ 	device_del(&cldev->dev);
+ 
+ 	list_del_init(&cldev->bus_list);
+diff --git a/drivers/misc/mei/client.c b/drivers/misc/mei/client.c
+index ebdcf0b..b32c825 100644
+--- a/drivers/misc/mei/client.c
++++ b/drivers/misc/mei/client.c
+@@ -1,17 +1,7 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
++ * Copyright (c) 2003-2019, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2012, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+ #include <linux/sched/signal.h>
+@@ -276,6 +266,7 @@ void mei_me_cl_rm_by_uuid(struct mei_device *dev, const uuid_le *uuid)
+ 	down_write(&dev->me_clients_rwsem);
+ 	me_cl = __mei_me_cl_by_uuid(dev, uuid);
+ 	__mei_me_cl_del(dev, me_cl);
++	mei_me_cl_put(me_cl);
+ 	up_write(&dev->me_clients_rwsem);
+ }
+ 
+@@ -297,6 +288,7 @@ void mei_me_cl_rm_by_uuid_id(struct mei_device *dev, const uuid_le *uuid, u8 id)
+ 	down_write(&dev->me_clients_rwsem);
+ 	me_cl = __mei_me_cl_by_uuid_id(dev, uuid, id);
+ 	__mei_me_cl_del(dev, me_cl);
++	mei_me_cl_put(me_cl);
+ 	up_write(&dev->me_clients_rwsem);
+ }
+ 
+@@ -318,23 +310,6 @@ void mei_me_cl_rm_all(struct mei_device *dev)
+ }
+ 
+ /**
+- * mei_cl_cmp_id - tells if the clients are the same
+- *
+- * @cl1: host client 1
+- * @cl2: host client 2
+- *
+- * Return: true  - if the clients has same host and me ids
+- *         false - otherwise
+- */
+-static inline bool mei_cl_cmp_id(const struct mei_cl *cl1,
+-				const struct mei_cl *cl2)
+-{
+-	return cl1 && cl2 &&
+-		(cl1->host_client_id == cl2->host_client_id) &&
+-		(mei_cl_me_id(cl1) == mei_cl_me_id(cl2));
+-}
+-
+-/**
+  * mei_io_cb_free - free mei_cb_private related memory
+  *
+  * @cb: mei callback struct
+@@ -418,8 +393,11 @@ static void mei_io_list_flush_cl(struct list_head *head,
+ 	struct mei_cl_cb *cb, *next;
+ 
+ 	list_for_each_entry_safe(cb, next, head, list) {
+-		if (mei_cl_cmp_id(cl, cb->cl))
++		if (cl == cb->cl) {
+ 			list_del_init(&cb->list);
++			if (cb->fop_type == MEI_FOP_READ)
++				mei_io_cb_free(cb);
++		}
+ 	}
+ }
+ 
+@@ -435,7 +413,7 @@ static void mei_io_tx_list_free_cl(struct list_head *head,
+ 	struct mei_cl_cb *cb, *next;
+ 
+ 	list_for_each_entry_safe(cb, next, head, list) {
+-		if (mei_cl_cmp_id(cl, cb->cl))
++		if (cl == cb->cl)
+ 			mei_tx_cb_dequeue(cb);
+ 	}
+ }
+@@ -478,7 +456,7 @@ struct mei_cl_cb *mei_cl_alloc_cb(struct mei_cl *cl, size_t length,
+ 	if (length == 0)
+ 		return cb;
+ 
+-	cb->buf.data = kmalloc(length, GFP_KERNEL);
++	cb->buf.data = kmalloc(roundup(length, MEI_SLOT_SIZE), GFP_KERNEL);
+ 	if (!cb->buf.data) {
+ 		mei_io_cb_free(cb);
+ 		return NULL;
+@@ -693,7 +671,7 @@ int mei_cl_unlink(struct mei_cl *cl)
+ 
+ void mei_host_client_init(struct mei_device *dev)
+ {
+-	dev->dev_state = MEI_DEV_ENABLED;
++	mei_set_devstate(dev, MEI_DEV_ENABLED);
+ 	dev->reset_count = 0;
+ 
+ 	schedule_work(&dev->bus_rescan_work);
+@@ -1374,7 +1352,9 @@ int mei_cl_notify_request(struct mei_cl *cl,
+ 
+ 	mutex_unlock(&dev->device_lock);
+ 	wait_event_timeout(cl->wait,
+-			   cl->notify_en == request || !mei_cl_is_connected(cl),
++			   cl->notify_en == request ||
++			   cl->status ||
++			   !mei_cl_is_connected(cl),
+ 			   mei_secs_to_jiffies(MEI_CL_CONNECT_TIMEOUT));
+ 	mutex_lock(&dev->device_lock);
+ 
+@@ -1573,10 +1553,13 @@ int mei_cl_irq_write(struct mei_cl *cl, struct mei_cl_cb *cb,
+ 	struct mei_msg_hdr mei_hdr;
+ 	size_t hdr_len = sizeof(mei_hdr);
+ 	size_t len;
+-	size_t hbuf_len;
++	size_t hbuf_len, dr_len;
+ 	int hbuf_slots;
++	u32 dr_slots;
++	u32 dma_len;
+ 	int rets;
+ 	bool first_chunk;
++	const void *data;
+ 
+ 	if (WARN_ON(!cl || !cl->dev))
+ 		return -ENODEV;
+@@ -1597,13 +1580,16 @@ int mei_cl_irq_write(struct mei_cl *cl, struct mei_cl_cb *cb,
+ 	}
+ 
+ 	len = buf->size - cb->buf_idx;
++	data = buf->data + cb->buf_idx;
+ 	hbuf_slots = mei_hbuf_empty_slots(dev);
+ 	if (hbuf_slots < 0) {
+ 		rets = -EOVERFLOW;
+ 		goto err;
+ 	}
+ 
+-	hbuf_len = mei_slots2data(hbuf_slots);
++	hbuf_len = mei_slots2data(hbuf_slots) & MEI_MSG_MAX_LEN_MASK;
++	dr_slots = mei_dma_ring_empty_slots(dev);
++	dr_len = mei_slots2data(dr_slots);
+ 
+ 	mei_msg_hdr_init(&mei_hdr, cb);
+ 
+@@ -1614,23 +1600,33 @@ int mei_cl_irq_write(struct mei_cl *cl, struct mei_cl_cb *cb,
+ 	if (len + hdr_len <= hbuf_len) {
+ 		mei_hdr.length = len;
+ 		mei_hdr.msg_complete = 1;
++	} else if (dr_slots && hbuf_len >= hdr_len + sizeof(dma_len)) {
++		mei_hdr.dma_ring = 1;
++		if (len > dr_len)
++			len = dr_len;
++		else
++			mei_hdr.msg_complete = 1;
++
++		mei_hdr.length = sizeof(dma_len);
++		dma_len = len;
++		data = &dma_len;
+ 	} else if ((u32)hbuf_slots == mei_hbuf_depth(dev)) {
+-		mei_hdr.length = hbuf_len - hdr_len;
++		len = hbuf_len - hdr_len;
++		mei_hdr.length = len;
+ 	} else {
+ 		return 0;
+ 	}
+ 
+-	cl_dbg(dev, cl, "buf: size = %zu idx = %zu\n",
+-			cb->buf.size, cb->buf_idx);
++	if (mei_hdr.dma_ring)
++		mei_dma_ring_write(dev, buf->data + cb->buf_idx, len);
+ 
+-	rets = mei_write_message(dev, &mei_hdr, hdr_len,
+-				 buf->data + cb->buf_idx, mei_hdr.length);
++	rets = mei_write_message(dev, &mei_hdr, hdr_len, data, mei_hdr.length);
+ 	if (rets)
+ 		goto err;
+ 
+ 	cl->status = 0;
+ 	cl->writing_state = MEI_WRITING;
+-	cb->buf_idx += mei_hdr.length;
++	cb->buf_idx += len;
+ 
+ 	if (first_chunk) {
+ 		if (mei_cl_tx_flow_ctrl_creds_reduce(cl)) {
+@@ -1665,11 +1661,13 @@ ssize_t mei_cl_write(struct mei_cl *cl, struct mei_cl_cb *cb)
+ 	struct mei_msg_data *buf;
+ 	struct mei_msg_hdr mei_hdr;
+ 	size_t hdr_len = sizeof(mei_hdr);
+-	size_t len;
+-	size_t hbuf_len;
++	size_t len, hbuf_len, dr_len;
+ 	int hbuf_slots;
++	u32 dr_slots;
++	u32 dma_len;
+ 	ssize_t rets;
+ 	bool blocking;
++	const void *data;
+ 
+ 	if (WARN_ON(!cl || !cl->dev))
+ 		return -ENODEV;
+@@ -1681,10 +1679,12 @@ ssize_t mei_cl_write(struct mei_cl *cl, struct mei_cl_cb *cb)
+ 
+ 	buf = &cb->buf;
+ 	len = buf->size;
+-	blocking = cb->blocking;
+ 
+ 	cl_dbg(dev, cl, "len=%zd\n", len);
+ 
++	blocking = cb->blocking;
++	data = buf->data;
++
+ 	rets = pm_runtime_get(dev->dev);
+ 	if (rets < 0 && rets != -EINPROGRESS) {
+ 		pm_runtime_put_noidle(dev->dev);
+@@ -1720,17 +1720,33 @@ ssize_t mei_cl_write(struct mei_cl *cl, struct mei_cl_cb *cb)
+ 		goto out;
+ 	}
+ 
+-	hbuf_len = mei_slots2data(hbuf_slots);
++	hbuf_len = mei_slots2data(hbuf_slots) & MEI_MSG_MAX_LEN_MASK;
++	dr_slots = mei_dma_ring_empty_slots(dev);
++	dr_len =  mei_slots2data(dr_slots);
+ 
+ 	if (len + hdr_len <= hbuf_len) {
+ 		mei_hdr.length = len;
+ 		mei_hdr.msg_complete = 1;
++	} else if (dr_slots && hbuf_len >= hdr_len + sizeof(dma_len)) {
++		mei_hdr.dma_ring = 1;
++		if (len > dr_len)
++			len = dr_len;
++		else
++			mei_hdr.msg_complete = 1;
++
++		mei_hdr.length = sizeof(dma_len);
++		dma_len = len;
++		data = &dma_len;
+ 	} else {
+-		mei_hdr.length = hbuf_len - hdr_len;
++		len = hbuf_len - hdr_len;
++		mei_hdr.length = len;
+ 	}
+ 
++	if (mei_hdr.dma_ring)
++		mei_dma_ring_write(dev, buf->data, len);
++
+ 	rets = mei_write_message(dev, &mei_hdr, hdr_len,
+-				 buf->data, mei_hdr.length);
++				 data, mei_hdr.length);
+ 	if (rets)
+ 		goto err;
+ 
+@@ -1739,7 +1755,9 @@ ssize_t mei_cl_write(struct mei_cl *cl, struct mei_cl_cb *cb)
+ 		goto err;
+ 
+ 	cl->writing_state = MEI_WRITING;
+-	cb->buf_idx = mei_hdr.length;
++	cb->buf_idx = len;
++	/* restore return value */
++	len = buf->size;
+ 
+ out:
+ 	if (mei_hdr.msg_complete)
+diff --git a/drivers/misc/mei/client.h b/drivers/misc/mei/client.h
+index ddce3a0..2f8954d 100644
+--- a/drivers/misc/mei/client.h
++++ b/drivers/misc/mei/client.h
+@@ -1,17 +1,7 @@
++/* SPDX-License-Identifier: GPL-2.0 */
+ /*
+- *
++ * Copyright (c) 2003-2018, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2012, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+ #ifndef _MEI_CLIENT_H_
+diff --git a/drivers/misc/mei/debugfs.c b/drivers/misc/mei/debugfs.c
+index 7b5df8f..a26c716 100644
+--- a/drivers/misc/mei/debugfs.c
++++ b/drivers/misc/mei/debugfs.c
+@@ -1,22 +1,14 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
++ * Copyright (c) 2012-2016, Intel Corporation. All rights reserved
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2012-2013, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
++
+ #include <linux/slab.h>
+ #include <linux/kernel.h>
+ #include <linux/device.h>
+ #include <linux/debugfs.h>
++#include <linux/seq_file.h>
+ 
+ #include <linux/mei.h>
+ 
+@@ -24,104 +16,56 @@
+ #include "client.h"
+ #include "hw.h"
+ 
+-static ssize_t mei_dbgfs_read_meclients(struct file *fp, char __user *ubuf,
+-					size_t cnt, loff_t *ppos)
++static int mei_dbgfs_meclients_show(struct seq_file *m, void *unused)
+ {
+-	struct mei_device *dev = fp->private_data;
++	struct mei_device *dev = m->private;
+ 	struct mei_me_client *me_cl;
+-	size_t bufsz = 1;
+-	char *buf;
+ 	int i = 0;
+-	int pos = 0;
+-	int ret;
+ 
+-#define HDR \
+-"  |id|fix|         UUID                       |con|msg len|sb|refc|\n"
++	if (!dev)
++		return -ENODEV;
+ 
+ 	down_read(&dev->me_clients_rwsem);
+-	list_for_each_entry(me_cl, &dev->me_clients, list)
+-		bufsz++;
+-
+-	bufsz *= sizeof(HDR) + 1;
+-	buf = kzalloc(bufsz, GFP_KERNEL);
+-	if (!buf) {
+-		up_read(&dev->me_clients_rwsem);
+-		return -ENOMEM;
+-	}
+ 
+-	pos += scnprintf(buf + pos, bufsz - pos, HDR);
+-#undef HDR
++	seq_puts(m, "  |id|fix|         UUID                       |con|msg len|sb|refc|\n");
+ 
+ 	/*  if the driver is not enabled the list won't be consistent */
+ 	if (dev->dev_state != MEI_DEV_ENABLED)
+ 		goto out;
+ 
+ 	list_for_each_entry(me_cl, &dev->me_clients, list) {
+-
+-		if (mei_me_cl_get(me_cl)) {
+-			pos += scnprintf(buf + pos, bufsz - pos,
+-				"%2d|%2d|%3d|%pUl|%3d|%7d|%2d|%4d|\n",
+-				i++, me_cl->client_id,
+-				me_cl->props.fixed_address,
+-				&me_cl->props.protocol_name,
+-				me_cl->props.max_number_of_connections,
+-				me_cl->props.max_msg_length,
+-				me_cl->props.single_recv_buf,
+-				kref_read(&me_cl->refcnt));
+-
+-			mei_me_cl_put(me_cl);
+-		}
++		if (!mei_me_cl_get(me_cl))
++			continue;
++
++		seq_printf(m, "%2d|%2d|%3d|%pUl|%3d|%7d|%2d|%4d|\n",
++			   i++, me_cl->client_id,
++			   me_cl->props.fixed_address,
++			   &me_cl->props.protocol_name,
++			   me_cl->props.max_number_of_connections,
++			   me_cl->props.max_msg_length,
++			   me_cl->props.single_recv_buf,
++			   kref_read(&me_cl->refcnt));
++		mei_me_cl_put(me_cl);
+ 	}
+ 
+ out:
+ 	up_read(&dev->me_clients_rwsem);
+-	ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, pos);
+-	kfree(buf);
+-	return ret;
++	return 0;
+ }
++DEFINE_SHOW_ATTRIBUTE(mei_dbgfs_meclients);
+ 
+-static const struct file_operations mei_dbgfs_fops_meclients = {
+-	.open = simple_open,
+-	.read = mei_dbgfs_read_meclients,
+-	.llseek = generic_file_llseek,
+-};
+-
+-static ssize_t mei_dbgfs_read_active(struct file *fp, char __user *ubuf,
+-					size_t cnt, loff_t *ppos)
++static int mei_dbgfs_active_show(struct seq_file *m, void *unused)
+ {
+-	struct mei_device *dev = fp->private_data;
++	struct mei_device *dev = m->private;
+ 	struct mei_cl *cl;
+-	size_t bufsz = 1;
+-	char *buf;
+ 	int i = 0;
+-	int pos = 0;
+-	int ret;
+-
+-#define HDR "   |me|host|state|rd|wr|wrq\n"
+ 
+ 	if (!dev)
+ 		return -ENODEV;
+ 
+ 	mutex_lock(&dev->device_lock);
+ 
+-	/*
+-	 * if the driver is not enabled the list won't be consistent,
+-	 * we output empty table
+-	 */
+-	if (dev->dev_state == MEI_DEV_ENABLED)
+-		list_for_each_entry(cl, &dev->file_list, link)
+-			bufsz++;
+-
+-	bufsz *= sizeof(HDR) + 1;
+-
+-	buf = kzalloc(bufsz, GFP_KERNEL);
+-	if  (!buf) {
+-		mutex_unlock(&dev->device_lock);
+-		return -ENOMEM;
+-	}
+-
+-	pos += scnprintf(buf + pos, bufsz - pos, HDR);
+-#undef HDR
++	seq_puts(m, "   |me|host|state|rd|wr|wrq\n");
+ 
+ 	/*  if the driver is not enabled the list won't be consistent */
+ 	if (dev->dev_state != MEI_DEV_ENABLED)
+@@ -129,76 +73,44 @@ static ssize_t mei_dbgfs_read_active(struct file *fp, char __user *ubuf,
+ 
+ 	list_for_each_entry(cl, &dev->file_list, link) {
+ 
+-		pos += scnprintf(buf + pos, bufsz - pos,
+-			"%3d|%2d|%4d|%5d|%2d|%2d|%3u\n",
+-			i, mei_cl_me_id(cl), cl->host_client_id, cl->state,
+-			!list_empty(&cl->rd_completed), cl->writing_state,
+-			cl->tx_cb_queued);
++		seq_printf(m, "%3d|%2d|%4d|%5d|%2d|%2d|%3u\n",
++			   i, mei_cl_me_id(cl), cl->host_client_id, cl->state,
++			   !list_empty(&cl->rd_completed), cl->writing_state,
++			   cl->tx_cb_queued);
+ 		i++;
+ 	}
+ out:
+ 	mutex_unlock(&dev->device_lock);
+-	ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, pos);
+-	kfree(buf);
+-	return ret;
++	return 0;
+ }
++DEFINE_SHOW_ATTRIBUTE(mei_dbgfs_active);
+ 
+-static const struct file_operations mei_dbgfs_fops_active = {
+-	.open = simple_open,
+-	.read = mei_dbgfs_read_active,
+-	.llseek = generic_file_llseek,
+-};
+-
+-static ssize_t mei_dbgfs_read_devstate(struct file *fp, char __user *ubuf,
+-					size_t cnt, loff_t *ppos)
++static int mei_dbgfs_devstate_show(struct seq_file *m, void *unused)
+ {
+-	struct mei_device *dev = fp->private_data;
+-	const size_t bufsz = 1024;
+-	char *buf = kzalloc(bufsz, GFP_KERNEL);
+-	int pos = 0;
+-	int ret;
+-
+-	if  (!buf)
+-		return -ENOMEM;
++	struct mei_device *dev = m->private;
+ 
+-	pos += scnprintf(buf + pos, bufsz - pos, "dev: %s\n",
+-			mei_dev_state_str(dev->dev_state));
+-	pos += scnprintf(buf + pos, bufsz - pos, "hbm: %s\n",
+-			mei_hbm_state_str(dev->hbm_state));
++	seq_printf(m, "dev: %s\n", mei_dev_state_str(dev->dev_state));
++	seq_printf(m, "hbm: %s\n", mei_hbm_state_str(dev->hbm_state));
+ 
+ 	if (dev->hbm_state >= MEI_HBM_ENUM_CLIENTS &&
+ 	    dev->hbm_state <= MEI_HBM_STARTED) {
+-		pos += scnprintf(buf + pos, bufsz - pos, "hbm features:\n");
+-		pos += scnprintf(buf + pos, bufsz - pos, "\tPG: %01d\n",
+-				 dev->hbm_f_pg_supported);
+-		pos += scnprintf(buf + pos, bufsz - pos, "\tDC: %01d\n",
+-				 dev->hbm_f_dc_supported);
+-		pos += scnprintf(buf + pos, bufsz - pos, "\tIE: %01d\n",
+-				 dev->hbm_f_ie_supported);
+-		pos += scnprintf(buf + pos, bufsz - pos, "\tDOT: %01d\n",
+-				 dev->hbm_f_dot_supported);
+-		pos += scnprintf(buf + pos, bufsz - pos, "\tEV: %01d\n",
+-				 dev->hbm_f_ev_supported);
+-		pos += scnprintf(buf + pos, bufsz - pos, "\tFA: %01d\n",
+-				 dev->hbm_f_fa_supported);
+-		pos += scnprintf(buf + pos, bufsz - pos, "\tOS: %01d\n",
+-				 dev->hbm_f_os_supported);
+-		pos += scnprintf(buf + pos, bufsz - pos, "\tDR: %01d\n",
+-				 dev->hbm_f_dr_supported);
++		seq_puts(m, "hbm features:\n");
++		seq_printf(m, "\tPG: %01d\n", dev->hbm_f_pg_supported);
++		seq_printf(m, "\tDC: %01d\n", dev->hbm_f_dc_supported);
++		seq_printf(m, "\tIE: %01d\n", dev->hbm_f_ie_supported);
++		seq_printf(m, "\tDOT: %01d\n", dev->hbm_f_dot_supported);
++		seq_printf(m, "\tEV: %01d\n", dev->hbm_f_ev_supported);
++		seq_printf(m, "\tFA: %01d\n", dev->hbm_f_fa_supported);
++		seq_printf(m, "\tOS: %01d\n", dev->hbm_f_os_supported);
++		seq_printf(m, "\tDR: %01d\n", dev->hbm_f_dr_supported);
+ 	}
+ 
+-	pos += scnprintf(buf + pos, bufsz - pos, "pg:  %s, %s\n",
+-			mei_pg_is_enabled(dev) ? "ENABLED" : "DISABLED",
+-			mei_pg_state_str(mei_pg_state(dev)));
+-	ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, pos);
+-	kfree(buf);
+-	return ret;
++	seq_printf(m, "pg:  %s, %s\n",
++		   mei_pg_is_enabled(dev) ? "ENABLED" : "DISABLED",
++		   mei_pg_state_str(mei_pg_state(dev)));
++	return 0;
+ }
+-static const struct file_operations mei_dbgfs_fops_devstate = {
+-	.open = simple_open,
+-	.read = mei_dbgfs_read_devstate,
+-	.llseek = generic_file_llseek,
+-};
++DEFINE_SHOW_ATTRIBUTE(mei_dbgfs_devstate);
+ 
+ static ssize_t mei_dbgfs_write_allow_fa(struct file *file,
+ 					const char __user *user_buf,
+@@ -217,7 +129,7 @@ static ssize_t mei_dbgfs_write_allow_fa(struct file *file,
+ 	return ret;
+ }
+ 
+-static const struct file_operations mei_dbgfs_fops_allow_fa = {
++static const struct file_operations mei_dbgfs_allow_fa_fops = {
+ 	.open = simple_open,
+ 	.read = debugfs_read_file_bool,
+ 	.write = mei_dbgfs_write_allow_fa,
+@@ -242,47 +154,21 @@ void mei_dbgfs_deregister(struct mei_device *dev)
+  *
+  * @dev: the mei device structure
+  * @name: the mei device name
+- *
+- * Return: 0 on success, <0 on failure.
+  */
+-int mei_dbgfs_register(struct mei_device *dev, const char *name)
++void mei_dbgfs_register(struct mei_device *dev, const char *name)
+ {
+-	struct dentry *dir, *f;
++	struct dentry *dir;
+ 
+ 	dir = debugfs_create_dir(name, NULL);
+-	if (!dir)
+-		return -ENOMEM;
+-
+ 	dev->dbgfs_dir = dir;
+ 
+-	f = debugfs_create_file("meclients", S_IRUSR, dir,
+-				dev, &mei_dbgfs_fops_meclients);
+-	if (!f) {
+-		dev_err(dev->dev, "meclients: registration failed\n");
+-		goto err;
+-	}
+-	f = debugfs_create_file("active", S_IRUSR, dir,
+-				dev, &mei_dbgfs_fops_active);
+-	if (!f) {
+-		dev_err(dev->dev, "active: registration failed\n");
+-		goto err;
+-	}
+-	f = debugfs_create_file("devstate", S_IRUSR, dir,
+-				dev, &mei_dbgfs_fops_devstate);
+-	if (!f) {
+-		dev_err(dev->dev, "devstate: registration failed\n");
+-		goto err;
+-	}
+-	f = debugfs_create_file("allow_fixed_address", S_IRUSR | S_IWUSR, dir,
+-				&dev->allow_fixed_address,
+-				&mei_dbgfs_fops_allow_fa);
+-	if (!f) {
+-		dev_err(dev->dev, "allow_fixed_address: registration failed\n");
+-		goto err;
+-	}
+-	return 0;
+-err:
+-	mei_dbgfs_deregister(dev);
+-	return -ENODEV;
++	debugfs_create_file("meclients", S_IRUSR, dir, dev,
++			    &mei_dbgfs_meclients_fops);
++	debugfs_create_file("active", S_IRUSR, dir, dev,
++			    &mei_dbgfs_active_fops);
++	debugfs_create_file("devstate", S_IRUSR, dir, dev,
++			    &mei_dbgfs_devstate_fops);
++	debugfs_create_file("allow_fixed_address", S_IRUSR | S_IWUSR, dir,
++			    &dev->allow_fixed_address,
++			    &mei_dbgfs_allow_fa_fops);
+ }
+-
+diff --git a/drivers/misc/mei/dma-ring.c b/drivers/misc/mei/dma-ring.c
+new file mode 100644
+index 00000000..ef56f84
+--- /dev/null
++++ b/drivers/misc/mei/dma-ring.c
+@@ -0,0 +1,269 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright(c) 2016-2018 Intel Corporation. All rights reserved.
++ */
++#include <linux/dma-mapping.h>
++#include <linux/mei.h>
++
++#include "mei_dev.h"
++
++/**
++ * mei_dmam_dscr_alloc() - allocate a managed coherent buffer
++ *     for the dma descriptor
++ * @dev: mei_device
++ * @dscr: dma descriptor
++ *
++ * Return:
++ * * 0       - on success or zero allocation request
++ * * -EINVAL - if size is not power of 2
++ * * -ENOMEM - of allocation has failed
++ */
++static int mei_dmam_dscr_alloc(struct mei_device *dev,
++			       struct mei_dma_dscr *dscr)
++{
++	if (!dscr->size)
++		return 0;
++
++	if (WARN_ON(!is_power_of_2(dscr->size)))
++		return -EINVAL;
++
++	if (dscr->vaddr)
++		return 0;
++
++	dscr->vaddr = dmam_alloc_coherent(dev->dev, dscr->size, &dscr->daddr,
++					  GFP_KERNEL);
++	if (!dscr->vaddr)
++		return -ENOMEM;
++
++	return 0;
++}
++
++/**
++ * mei_dmam_dscr_free() - free a managed coherent buffer
++ *     from the dma descriptor
++ * @dev: mei_device
++ * @dscr: dma descriptor
++ */
++static void mei_dmam_dscr_free(struct mei_device *dev,
++			       struct mei_dma_dscr *dscr)
++{
++	if (!dscr->vaddr)
++		return;
++
++	dmam_free_coherent(dev->dev, dscr->size, dscr->vaddr, dscr->daddr);
++	dscr->vaddr = NULL;
++}
++
++/**
++ * mei_dmam_ring_free() - free dma ring buffers
++ * @dev: mei device
++ */
++void mei_dmam_ring_free(struct mei_device *dev)
++{
++	int i;
++
++	for (i = 0; i < DMA_DSCR_NUM; i++)
++		mei_dmam_dscr_free(dev, &dev->dr_dscr[i]);
++}
++
++/**
++ * mei_dmam_ring_alloc() - allocate dma ring buffers
++ * @dev: mei device
++ *
++ * Return: -ENOMEM on allocation failure 0 otherwise
++ */
++int mei_dmam_ring_alloc(struct mei_device *dev)
++{
++	int i;
++
++	for (i = 0; i < DMA_DSCR_NUM; i++)
++		if (mei_dmam_dscr_alloc(dev, &dev->dr_dscr[i]))
++			goto err;
++
++	return 0;
++
++err:
++	mei_dmam_ring_free(dev);
++	return -ENOMEM;
++}
++
++/**
++ * mei_dma_ring_is_allocated() - check if dma ring is allocated
++ * @dev: mei device
++ *
++ * Return: true if dma ring is allocated
++ */
++bool mei_dma_ring_is_allocated(struct mei_device *dev)
++{
++	return !!dev->dr_dscr[DMA_DSCR_HOST].vaddr;
++}
++
++static inline
++struct hbm_dma_ring_ctrl *mei_dma_ring_ctrl(struct mei_device *dev)
++{
++	return (struct hbm_dma_ring_ctrl *)dev->dr_dscr[DMA_DSCR_CTRL].vaddr;
++}
++
++/**
++ * mei_dma_ring_reset() - reset the dma control block
++ * @dev: mei device
++ */
++void mei_dma_ring_reset(struct mei_device *dev)
++{
++	struct hbm_dma_ring_ctrl *ctrl = mei_dma_ring_ctrl(dev);
++
++	if (!ctrl)
++		return;
++
++	memset(ctrl, 0, sizeof(*ctrl));
++}
++
++/**
++ * mei_dma_copy_from() - copy from dma ring into buffer
++ * @dev: mei device
++ * @buf: data buffer
++ * @offset: offset in slots.
++ * @n: number of slots to copy.
++ */
++static size_t mei_dma_copy_from(struct mei_device *dev, unsigned char *buf,
++				u32 offset, u32 n)
++{
++	unsigned char *dbuf = dev->dr_dscr[DMA_DSCR_DEVICE].vaddr;
++
++	size_t b_offset = offset << 2;
++	size_t b_n = n << 2;
++
++	memcpy(buf, dbuf + b_offset, b_n);
++
++	return b_n;
++}
++
++/**
++ * mei_dma_copy_to() - copy to a buffer to the dma ring
++ * @dev: mei device
++ * @buf: data buffer
++ * @offset: offset in slots.
++ * @n: number of slots to copy.
++ */
++static size_t mei_dma_copy_to(struct mei_device *dev, unsigned char *buf,
++			      u32 offset, u32 n)
++{
++	unsigned char *hbuf = dev->dr_dscr[DMA_DSCR_HOST].vaddr;
++
++	size_t b_offset = offset << 2;
++	size_t b_n = n << 2;
++
++	memcpy(hbuf + b_offset, buf, b_n);
++
++	return b_n;
++}
++
++/**
++ * mei_dma_ring_read() - read data from the ring
++ * @dev: mei device
++ * @buf: buffer to read into: may be NULL in case of droping the data.
++ * @len: length to read.
++ */
++void mei_dma_ring_read(struct mei_device *dev, unsigned char *buf, u32 len)
++{
++	struct hbm_dma_ring_ctrl *ctrl = mei_dma_ring_ctrl(dev);
++	u32 dbuf_depth;
++	u32 rd_idx, rem, slots;
++
++	if (WARN_ON(!ctrl))
++		return;
++
++	dev_dbg(dev->dev, "reading from dma %u bytes\n", len);
++
++	if (!len)
++		return;
++
++	dbuf_depth = dev->dr_dscr[DMA_DSCR_DEVICE].size >> 2;
++	rd_idx = READ_ONCE(ctrl->dbuf_rd_idx) & (dbuf_depth - 1);
++	slots = mei_data2slots(len);
++
++	/* if buf is NULL we drop the packet by advancing the pointer.*/
++	if (!buf)
++		goto out;
++
++	if (rd_idx + slots > dbuf_depth) {
++		buf += mei_dma_copy_from(dev, buf, rd_idx, dbuf_depth - rd_idx);
++		rem = slots - (dbuf_depth - rd_idx);
++		rd_idx = 0;
++	} else {
++		rem = slots;
++	}
++
++	mei_dma_copy_from(dev, buf, rd_idx, rem);
++out:
++	WRITE_ONCE(ctrl->dbuf_rd_idx, ctrl->dbuf_rd_idx + slots);
++}
++
++static inline u32 mei_dma_ring_hbuf_depth(struct mei_device *dev)
++{
++	return dev->dr_dscr[DMA_DSCR_HOST].size >> 2;
++}
++
++/**
++ * mei_dma_ring_empty_slots() - calaculate number of empty slots in dma ring
++ * @dev: mei_device
++ *
++ * Return: number of empty slots
++ */
++u32 mei_dma_ring_empty_slots(struct mei_device *dev)
++{
++	struct hbm_dma_ring_ctrl *ctrl = mei_dma_ring_ctrl(dev);
++	u32 wr_idx, rd_idx, hbuf_depth, empty;
++
++	if (!mei_dma_ring_is_allocated(dev))
++		return 0;
++
++	if (WARN_ON(!ctrl))
++		return 0;
++
++	/* easier to work in slots */
++	hbuf_depth = mei_dma_ring_hbuf_depth(dev);
++	rd_idx = READ_ONCE(ctrl->hbuf_rd_idx);
++	wr_idx = READ_ONCE(ctrl->hbuf_wr_idx);
++
++	if (rd_idx > wr_idx)
++		empty = rd_idx - wr_idx;
++	else
++		empty = hbuf_depth - (wr_idx - rd_idx);
++
++	return empty;
++}
++
++/**
++ * mei_dma_ring_write - write data to dma ring host buffer
++ *
++ * @dev: mei_device
++ * @buf: data will be written
++ * @len: data length
++ */
++void mei_dma_ring_write(struct mei_device *dev, unsigned char *buf, u32 len)
++{
++	struct hbm_dma_ring_ctrl *ctrl = mei_dma_ring_ctrl(dev);
++	u32 hbuf_depth;
++	u32 wr_idx, rem, slots;
++
++	if (WARN_ON(!ctrl))
++		return;
++
++	dev_dbg(dev->dev, "writing to dma %u bytes\n", len);
++	hbuf_depth = mei_dma_ring_hbuf_depth(dev);
++	wr_idx = READ_ONCE(ctrl->hbuf_wr_idx) & (hbuf_depth - 1);
++	slots = mei_data2slots(len);
++
++	if (wr_idx + slots > hbuf_depth) {
++		buf += mei_dma_copy_to(dev, buf, wr_idx, hbuf_depth - wr_idx);
++		rem = slots - (hbuf_depth - wr_idx);
++		wr_idx = 0;
++	} else {
++		rem = slots;
++	}
++
++	mei_dma_copy_to(dev, buf, wr_idx, rem);
++
++	WRITE_ONCE(ctrl->hbuf_wr_idx, ctrl->hbuf_wr_idx + slots);
++}
+diff --git a/drivers/misc/mei/hbm.c b/drivers/misc/mei/hbm.c
+index d39cc29..a44094c 100644
+--- a/drivers/misc/mei/hbm.c
++++ b/drivers/misc/mei/hbm.c
+@@ -1,19 +1,8 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
++ * Copyright (c) 2003-2019, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2012, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+-
+ #include <linux/export.h>
+ #include <linux/sched.h>
+ #include <linux/wait.h>
+@@ -65,6 +54,7 @@ const char *mei_hbm_state_str(enum mei_hbm_state state)
+ 	MEI_HBM_STATE(IDLE);
+ 	MEI_HBM_STATE(STARTING);
+ 	MEI_HBM_STATE(STARTED);
++	MEI_HBM_STATE(DR_SETUP);
+ 	MEI_HBM_STATE(ENUM_CLIENTS);
+ 	MEI_HBM_STATE(CLIENT_PROPERTIES);
+ 	MEI_HBM_STATE(STOPPED);
+@@ -296,6 +286,48 @@ int mei_hbm_start_req(struct mei_device *dev)
+ }
+ 
+ /**
++ * mei_hbm_dma_setup_req() - setup DMA request
++ * @dev: the device structure
++ *
++ * Return: 0 on success and < 0 on failure
++ */
++static int mei_hbm_dma_setup_req(struct mei_device *dev)
++{
++	struct mei_msg_hdr mei_hdr;
++	struct hbm_dma_setup_request req;
++	const size_t len = sizeof(struct hbm_dma_setup_request);
++	unsigned int i;
++	int ret;
++
++	mei_hbm_hdr(&mei_hdr, len);
++
++	memset(&req, 0, len);
++	req.hbm_cmd = MEI_HBM_DMA_SETUP_REQ_CMD;
++	for (i = 0; i < DMA_DSCR_NUM; i++) {
++		phys_addr_t paddr;
++
++		paddr = dev->dr_dscr[i].daddr;
++		req.dma_dscr[i].addr_hi = upper_32_bits(paddr);
++		req.dma_dscr[i].addr_lo = lower_32_bits(paddr);
++		req.dma_dscr[i].size = dev->dr_dscr[i].size;
++	}
++
++	mei_dma_ring_reset(dev);
++
++	ret = mei_hbm_write_message(dev, &mei_hdr, &req);
++	if (ret) {
++		dev_err(dev->dev, "dma setup request write failed: ret = %d.\n",
++			ret);
++		return ret;
++	}
++
++	dev->hbm_state = MEI_HBM_DR_SETUP;
++	dev->init_clients_timer = MEI_CLIENTS_INIT_TIMEOUT;
++	mei_schedule_stall_timer(dev);
++	return 0;
++}
++
++/**
+  * mei_hbm_enum_clients_req - sends enumeration client request message.
+  *
+  * @dev: the device structure
+@@ -1051,6 +1083,7 @@ int mei_hbm_dispatch(struct mei_device *dev, struct mei_msg_hdr *hdr)
+ 	struct hbm_host_version_response *version_res;
+ 	struct hbm_props_response *props_res;
+ 	struct hbm_host_enum_response *enum_res;
++	struct hbm_dma_setup_response *dma_setup_res;
+ 	struct hbm_add_client_request *add_cl_req;
+ 	int ret;
+ 
+@@ -1115,14 +1148,58 @@ int mei_hbm_dispatch(struct mei_device *dev, struct mei_msg_hdr *hdr)
+ 			return -EPROTO;
+ 		}
+ 
+-		if (mei_hbm_enum_clients_req(dev)) {
+-			dev_err(dev->dev, "hbm: start: failed to send enumeration request\n");
+-			return -EIO;
++		if (dev->hbm_f_dr_supported) {
++			if (mei_dmam_ring_alloc(dev))
++				dev_info(dev->dev, "running w/o dma ring\n");
++			if (mei_dma_ring_is_allocated(dev)) {
++				if (mei_hbm_dma_setup_req(dev))
++					return -EIO;
++
++				wake_up(&dev->wait_hbm_start);
++				break;
++			}
+ 		}
+ 
++		dev->hbm_f_dr_supported = 0;
++		mei_dmam_ring_free(dev);
++
++		if (mei_hbm_enum_clients_req(dev))
++			return -EIO;
++
+ 		wake_up(&dev->wait_hbm_start);
+ 		break;
+ 
++	case MEI_HBM_DMA_SETUP_RES_CMD:
++		dev_dbg(dev->dev, "hbm: dma setup response: message received.\n");
++
++		dev->init_clients_timer = 0;
++
++		if (dev->hbm_state != MEI_HBM_DR_SETUP) {
++			dev_err(dev->dev, "hbm: dma setup response: state mismatch, [%d, %d]\n",
++				dev->dev_state, dev->hbm_state);
++			return -EPROTO;
++		}
++
++		dma_setup_res = (struct hbm_dma_setup_response *)mei_msg;
++
++		if (dma_setup_res->status) {
++			u8 status = dma_setup_res->status;
++
++			if (status == MEI_HBMS_NOT_ALLOWED) {
++				dev_dbg(dev->dev, "hbm: dma setup not allowed\n");
++			} else {
++				dev_info(dev->dev, "hbm: dma setup response: failure = %d %s\n",
++					 status,
++					 mei_hbm_status_str(status));
++			}
++			dev->hbm_f_dr_supported = 0;
++			mei_dmam_ring_free(dev);
++		}
++
++		if (mei_hbm_enum_clients_req(dev))
++			return -EIO;
++		break;
++
+ 	case CLIENT_CONNECT_RES_CMD:
+ 		dev_dbg(dev->dev, "hbm: client connect response: message received.\n");
+ 		mei_hbm_cl_res(dev, cl_cmd, MEI_FOP_CONNECT);
+@@ -1278,8 +1355,8 @@ int mei_hbm_dispatch(struct mei_device *dev, struct mei_msg_hdr *hdr)
+ 		break;
+ 
+ 	default:
+-		BUG();
+-		break;
++		WARN(1, "hbm: wrong command %d\n", mei_msg->hbm_cmd);
++		return -EPROTO;
+ 
+ 	}
+ 	return 0;
+diff --git a/drivers/misc/mei/hbm.h b/drivers/misc/mei/hbm.h
+index a2025a5..5aa58cf 100644
+--- a/drivers/misc/mei/hbm.h
++++ b/drivers/misc/mei/hbm.h
+@@ -1,17 +1,7 @@
++/* SPDX-License-Identifier: GPL-2.0 */
+ /*
+- *
++ * Copyright (c) 2003-2018, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2012, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+ #ifndef _MEI_HBM_H_
+@@ -26,6 +16,7 @@ struct mei_cl;
+  *
+  * @MEI_HBM_IDLE : protocol not started
+  * @MEI_HBM_STARTING : start request message was sent
++ * @MEI_HBM_DR_SETUP : dma ring setup request message was sent
+  * @MEI_HBM_ENUM_CLIENTS : enumeration request was sent
+  * @MEI_HBM_CLIENT_PROPERTIES : acquiring clients properties
+  * @MEI_HBM_STARTED : enumeration was completed
+@@ -34,6 +25,7 @@ struct mei_cl;
+ enum mei_hbm_state {
+ 	MEI_HBM_IDLE = 0,
+ 	MEI_HBM_STARTING,
++	MEI_HBM_DR_SETUP,
+ 	MEI_HBM_ENUM_CLIENTS,
+ 	MEI_HBM_CLIENT_PROPERTIES,
+ 	MEI_HBM_STARTED,
+diff --git a/drivers/misc/mei/hw-me-regs.h b/drivers/misc/mei/hw-me-regs.h
+index 679abe2..b86ce50 100644
+--- a/drivers/misc/mei/hw-me-regs.h
++++ b/drivers/misc/mei/hw-me-regs.h
+@@ -1,68 +1,8 @@
+-/******************************************************************************
++/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
++/*
++ * Copyright (c) 2003-2019, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Intel MEI Interface Header
+- *
+- * This file is provided under a dual BSD/GPLv2 license.  When using or
+- * redistributing this file, you may do so under either license.
+- *
+- * GPL LICENSE SUMMARY
+- *
+- * Copyright(c) 2003 - 2012 Intel Corporation. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of version 2 of the GNU General Public License as
+- * published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope that it will be useful, but
+- * WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+- * General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License
+- * along with this program; if not, write to the Free Software
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
+- * USA
+- *
+- * The full GNU General Public License is included in this distribution
+- * in the file called LICENSE.GPL.
+- *
+- * Contact Information:
+- *	Intel Corporation.
+- *	linux-mei@linux.intel.com
+- *	http://www.intel.com
+- *
+- * BSD LICENSE
+- *
+- * Copyright(c) 2003 - 2012 Intel Corporation. All rights reserved.
+- * All rights reserved.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions
+- * are met:
+- *
+- *  * Redistributions of source code must retain the above copyright
+- *    notice, this list of conditions and the following disclaimer.
+- *  * Redistributions in binary form must reproduce the above copyright
+- *    notice, this list of conditions and the following disclaimer in
+- *    the documentation and/or other materials provided with the
+- *    distribution.
+- *  * Neither the name Intel Corporation nor the names of its
+- *    contributors may be used to endorse or promote products derived
+- *    from this software without specific prior written permission.
+- *
+- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+- *
+- *****************************************************************************/
++ */
+ #ifndef _MEI_HW_MEI_REGS_H_
+ #define _MEI_HW_MEI_REGS_H_
+ 
+@@ -153,26 +93,12 @@
+ 
+ #define MEI_DEV_ID_ICP_LP     0x34E0  /* Ice Lake Point LP */
+ 
+-#define MEI_DEV_ID_CMP_LP     0x02e0  /* Comet Point LP */
+-#define MEI_DEV_ID_CMP_LP_3   0x02e4  /* Comet Point LP 3 (iTouch) */
+-
+-#define MEI_DEV_ID_CMP_V      0xA3BA  /* Comet Point Lake V */
+-
+-#define MEI_DEV_ID_CMP_H      0x06e0  /* Comet Lake H */
+-#define MEI_DEV_ID_CMP_H_3    0x06e4  /* Comet Lake H 3 (iTouch) */
+-
+-#define MEI_DEV_ID_ICP_LP     0x34E0  /* Ice Lake Point LP */
+-
+-#define MEI_DEV_ID_TGP_LP     0xA0E0  /* Tiger Lake Point LP */
+-
+-#define MEI_DEV_ID_MCC        0x4B70  /* Mule Creek Canyon (EHL) */
+-#define MEI_DEV_ID_MCC_4      0x4B75  /* Mule Creek Canyon 4 (EHL) */
+-
+ #define MEI_DEV_ID_JSP_N      0x4DE0  /* Jasper Lake Point N */
+ 
+ #define MEI_DEV_ID_TGP_LP     0xA0E0  /* Tiger Lake Point LP */
+ 
+ #define MEI_DEV_ID_MCC        0x4B70  /* Mule Creek Canyon (EHL) */
++#define MEI_DEV_ID_MCC_4      0x4B75  /* Mule Creek Canyon 4 (EHL) */
+ 
+ /*
+  * MEI HW Section
+diff --git a/drivers/misc/mei/hw-me.c b/drivers/misc/mei/hw-me.c
+index c6222f5..7c5bebf 100644
+--- a/drivers/misc/mei/hw-me.c
++++ b/drivers/misc/mei/hw-me.c
+@@ -1,17 +1,7 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
+- * Intel Management Engine Interface (Intel MEI) Linux driver
+  * Copyright (c) 2003-2019, Intel Corporation. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
++ * Intel Management Engine Interface (Intel MEI) Linux driver
+  */
+ 
+ #include <linux/pci.h>
+@@ -225,7 +215,7 @@ static int mei_me_fw_status(struct mei_device *dev,
+ 	fw_status->count = fw_src->count;
+ 	for (i = 0; i < fw_src->count && i < MEI_FW_STATUS_MAX; i++) {
+ 		ret = hw->read_fws(dev, fw_src->status[i],
+-					    &fw_status->status[i]);
++				   &fw_status->status[i]);
+ 		trace_mei_pci_cfg_read(dev->dev, "PCI_CFG_HFS_X",
+ 				       fw_src->status[i],
+ 				       fw_status->status[i]);
+@@ -240,6 +230,7 @@ static int mei_me_fw_status(struct mei_device *dev,
+  * mei_me_hw_config - configure hw dependent settings
+  *
+  * @dev: mei device
++ *
+  * Return:
+  *  * -EINVAL when read_fws is not set
+  *  * 0 on success
+@@ -378,9 +369,6 @@ static void mei_me_hw_reset_release(struct mei_device *dev)
+ 	hcsr |= H_IG;
+ 	hcsr &= ~H_RST;
+ 	mei_hcsr_set(dev, hcsr);
+-
+-	/* complete this write before we set host ready on another CPU */
+-	mmiowb();
+ }
+ 
+ /**
+@@ -1416,7 +1404,7 @@ static bool mei_me_fw_type_sps_4(const struct pci_dev *pdev)
+ }
+ 
+ #define MEI_CFG_FW_SPS_4                          \
+-       .quirk_probe = mei_me_fw_type_sps_4
++	.quirk_probe = mei_me_fw_type_sps_4
+ 
+ /**
+  * mei_me_fw_sku_sps() - check for sps sku
+@@ -1430,30 +1418,30 @@ static bool mei_me_fw_type_sps_4(const struct pci_dev *pdev)
+  */
+ static bool mei_me_fw_type_sps(const struct pci_dev *pdev)
+ {
+-       u32 reg;
+-       u32 fw_type;
+-       unsigned int devfn;
++	u32 reg;
++	u32 fw_type;
++	unsigned int devfn;
+ 
+-       devfn = PCI_DEVFN(PCI_SLOT(pdev->devfn), 0);
+-       pci_bus_read_config_dword(pdev->bus, devfn, PCI_CFG_HFS_3, &reg);
+-       trace_mei_pci_cfg_read(&pdev->dev, "PCI_CFG_HFS_3", PCI_CFG_HFS_3, reg);
+-       fw_type = (reg & PCI_CFG_HFS_3_FW_SKU_MSK);
++	devfn = PCI_DEVFN(PCI_SLOT(pdev->devfn), 0);
++	pci_bus_read_config_dword(pdev->bus, devfn, PCI_CFG_HFS_3, &reg);
++	trace_mei_pci_cfg_read(&pdev->dev, "PCI_CFG_HFS_3", PCI_CFG_HFS_3, reg);
++	fw_type = (reg & PCI_CFG_HFS_3_FW_SKU_MSK);
+ 
+-       dev_dbg(&pdev->dev, "fw type is %d\n", fw_type);
++	dev_dbg(&pdev->dev, "fw type is %d\n", fw_type);
+ 
+-       return fw_type == PCI_CFG_HFS_3_FW_SKU_SPS;
++	return fw_type == PCI_CFG_HFS_3_FW_SKU_SPS;
+ }
+ 
+ #define MEI_CFG_KIND_ITOUCH                     \
+-       .kind = "itouch"
++	.kind = "itouch"
+ 
+ #define MEI_CFG_TYPE_GSC                        \
+-        .kind = "gsc"
++	.kind = "gsc"
+ 
+ #define MEI_CFG_TYPE_GSCFI                      \
+-        .kind = "gscfi"
++	.kind = "gscfi"
+ 
+-#define MEI_CFG_FW_SPS                           \
++#define MEI_CFG_FW_SPS                          \
+ 	.quirk_probe = mei_me_fw_type_sps
+ 
+ #define MEI_CFG_FW_VER_SUPP                     \
+@@ -1485,11 +1473,6 @@ static bool mei_me_fw_type_sps(const struct pci_dev *pdev)
+ 	.dma_size[DMA_DSCR_DEVICE] = SZ_128K, \
+ 	.dma_size[DMA_DSCR_CTRL] = PAGE_SIZE
+ 
+-#define MEI_CFG_DMA_128 \
+-	.dma_size[DMA_DSCR_HOST] = SZ_128K, \
+-	.dma_size[DMA_DSCR_DEVICE] = SZ_128K, \
+-	.dma_size[DMA_DSCR_CTRL] = PAGE_SIZE
+-
+ #define MEI_CFG_TRC \
+ 	.hw_trc_supported = 1
+ 
+@@ -1529,9 +1512,9 @@ static const struct mei_cfg mei_me_pch8_cfg = {
+ 
+ /* PCH8 Lynx Point and newer devices - iTouch */
+ static const struct mei_cfg mei_me_pch8_itouch_cfg = {
+-        MEI_CFG_KIND_ITOUCH,
+-        MEI_CFG_PCH8_HFS,
+-        MEI_CFG_FW_VER_SUPP,
++	MEI_CFG_KIND_ITOUCH,
++	MEI_CFG_PCH8_HFS,
++	MEI_CFG_FW_VER_SUPP,
+ };
+ 
+ /* PCH8 Lynx Point with quirk for SPS Firmware exclusion */
+@@ -1543,9 +1526,9 @@ static const struct mei_cfg mei_me_pch8_sps_4_cfg = {
+ 
+ /* LBG with quirk for SPS (4.0) Firmware exclusion */
+ static const struct mei_cfg mei_me_pch12_sps_4_cfg = {
+-        MEI_CFG_PCH8_HFS,
+-        MEI_CFG_FW_VER_SUPP,
+-        MEI_CFG_FW_SPS_4,
++	MEI_CFG_PCH8_HFS,
++	MEI_CFG_FW_VER_SUPP,
++	MEI_CFG_FW_SPS_4,
+ };
+ 
+ /* Cannon Lake and newer devices */
+@@ -1557,20 +1540,20 @@ static const struct mei_cfg mei_me_pch12_cfg = {
+ 
+ /* Cannon Lake with quirk for SPS 5.0 and newer Firmware exclusion */
+ static const struct mei_cfg mei_me_pch12_sps_cfg = {
+-        MEI_CFG_PCH8_HFS,
+-        MEI_CFG_FW_VER_SUPP,
+-        MEI_CFG_DMA_128,
+-        MEI_CFG_FW_SPS,
++	MEI_CFG_PCH8_HFS,
++	MEI_CFG_FW_VER_SUPP,
++	MEI_CFG_DMA_128,
++	MEI_CFG_FW_SPS,
+ };
+ 
+ /* Cannon Lake itouch with quirk for SPS 5.0 and newer Firmware exclusion
+  * w/o DMA support.
+  */
+ static const struct mei_cfg mei_me_pch12_itouch_sps_cfg = {
+-        MEI_CFG_KIND_ITOUCH,
+-        MEI_CFG_PCH8_HFS,
+-        MEI_CFG_FW_VER_SUPP,
+-        MEI_CFG_FW_SPS,
++	MEI_CFG_KIND_ITOUCH,
++	MEI_CFG_PCH8_HFS,
++	MEI_CFG_FW_VER_SUPP,
++	MEI_CFG_FW_SPS,
+ };
+ 
+ /* Tiger Lake and newer devices */
+@@ -1589,8 +1572,8 @@ static const struct mei_cfg mei_me_gsc_cfg = {
+ 
+ /* Graphics System Controller Firmware Interface */
+ static const struct mei_cfg mei_me_gscfi_cfg = {
+-        MEI_CFG_TYPE_GSCFI,
+-        MEI_CFG_PCH8_HFS,
++	MEI_CFG_TYPE_GSCFI,
++	MEI_CFG_PCH8_HFS,
+ };
+ 
+ /*
+@@ -1606,11 +1589,11 @@ static const struct mei_cfg *const mei_cfg_list[] = {
+ 	[MEI_ME_PCH_CPT_PBG_CFG] = &mei_me_pch_cpt_pbg_cfg,
+ 	[MEI_ME_PCH8_CFG] = &mei_me_pch8_cfg,
+ 	[MEI_ME_PCH8_ITOUCH_CFG] = &mei_me_pch8_itouch_cfg,
+-        [MEI_ME_PCH8_SPS_4_CFG] = &mei_me_pch8_sps_4_cfg,
++	[MEI_ME_PCH8_SPS_4_CFG] = &mei_me_pch8_sps_4_cfg,
+ 	[MEI_ME_PCH12_CFG] = &mei_me_pch12_cfg,
+ 	[MEI_ME_PCH12_SPS_4_CFG] = &mei_me_pch12_sps_4_cfg,
+-        [MEI_ME_PCH12_SPS_CFG] = &mei_me_pch12_sps_cfg,
+-        [MEI_ME_PCH12_SPS_ITOUCH_CFG] = &mei_me_pch12_itouch_sps_cfg,
++	[MEI_ME_PCH12_SPS_CFG] = &mei_me_pch12_sps_cfg,
++	[MEI_ME_PCH12_SPS_ITOUCH_CFG] = &mei_me_pch12_itouch_sps_cfg,
+ 	[MEI_ME_PCH15_CFG] = &mei_me_pch15_cfg,
+ 	[MEI_ME_GSC_CFG] = &mei_me_gsc_cfg,
+ 	[MEI_ME_GSCFI_CFG] = &mei_me_gscfi_cfg,
+@@ -1640,20 +1623,25 @@ struct mei_device *mei_me_dev_init(struct device *parent,
+ {
+ 	struct mei_device *dev;
+ 	struct mei_me_hw *hw;
++	int i;
+ 
+ 	dev = devm_kzalloc(parent, sizeof(struct mei_device) +
+ 			   sizeof(struct mei_me_hw), GFP_KERNEL);
+ 	if (!dev)
+ 		return NULL;
++
+ 	hw = to_me_hw(dev);
+ 
++	for (i = 0; i < DMA_DSCR_NUM; i++)
++		dev->dr_dscr[i].size = cfg->dma_size[i];
++
+ 	mei_device_init(dev, parent, &mei_me_hw_ops);
+ 	hw->cfg = cfg;
++
+ 	dev->fw_f_fw_ver_supported = cfg->fw_ver_supported;
+ 
+ 	dev->kind = cfg->kind;
+-	
++
+ 	return dev;
+ }
+ EXPORT_SYMBOL_GPL(mei_me_dev_init);
+-
+diff --git a/drivers/misc/mei/hw-me.h b/drivers/misc/mei/hw-me.h
+index b3d2443..03901bb 100644
+--- a/drivers/misc/mei/hw-me.h
++++ b/drivers/misc/mei/hw-me.h
+@@ -1,21 +1,9 @@
++/* SPDX-License-Identifier: GPL-2.0 */
+ /*
+- *
++ * Copyright (c) 2012-2020, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2019, Intel Corporation. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+-
+-
+ #ifndef _MEI_INTERFACE_H_
+ #define _MEI_INTERFACE_H_
+ 
+@@ -92,17 +80,17 @@ struct mei_me_hw {
+  *                         client platforms.
+  * @MEI_ME_PCH8_ITOUCH_CFG:Platform Controller Hub Gen8 and newer
+  *                         client platforms (iTouch).
+- * @MEI_ME_PCH8_SPS_4_CFG:   Platform Controller Hub Gen8 and newer
++ * @MEI_ME_PCH8_SPS_4_CFG: Platform Controller Hub Gen8 and newer
+  *                         servers platforms with quirk for
+  *                         SPS firmware exclusion.
+- * @MEI_ME_PCH12_CFG:      Platform Controller Hub Gen12 and newer.
+- * @MEI_ME_PCH12_SPS_4_CFG:  Platform Controller Hub Gen12 up to 4.0
++ * @MEI_ME_PCH12_CFG:      Platform Controller Hub Gen12 and newer
++ * @MEI_ME_PCH12_SPS_4_CFG:Platform Controller Hub Gen12 up to 4.0
+  *                         servers platforms with quirk for
+  *                         SPS firmware exclusion.
+  * @MEI_ME_PCH12_SPS_CFG:  Platform Controller Hub Gen12 5.0 and newer
+  *                         servers platforms with quirk for
+  *                         SPS firmware exclusion.
+- * @MEI_ME_PCH15_CFG:      Platform Controller Hub Gen15 and newer.
++ * @MEI_ME_PCH15_CFG:      Platform Controller Hub Gen15 and newer
+  * @MEI_ME_NUM_CFG:        Upper Sentinel.
+  */
+ enum mei_cfg_idx {
+@@ -117,8 +105,8 @@ enum mei_cfg_idx {
+ 	MEI_ME_PCH8_SPS_4_CFG,
+ 	MEI_ME_PCH12_CFG,
+ 	MEI_ME_PCH12_SPS_4_CFG,
+-        MEI_ME_PCH12_SPS_CFG,
+-        MEI_ME_PCH12_SPS_ITOUCH_CFG,
++	MEI_ME_PCH12_SPS_CFG,
++	MEI_ME_PCH12_SPS_ITOUCH_CFG,
+ 	MEI_ME_PCH15_CFG,
+ 	MEI_ME_GSC_CFG,
+ 	MEI_ME_GSCFI_CFG,
+diff --git a/drivers/misc/mei/hw-txe-regs.h b/drivers/misc/mei/hw-txe-regs.h
+index f19229c..a92b306 100644
+--- a/drivers/misc/mei/hw-txe-regs.h
++++ b/drivers/misc/mei/hw-txe-regs.h
+@@ -1,63 +1,8 @@
+-/******************************************************************************
++/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
++/*
++ * Copyright (c) 2013-2014, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Intel MEI Interface Header
+- *
+- * This file is provided under a dual BSD/GPLv2 license.  When using or
+- * redistributing this file, you may do so under either license.
+- *
+- * GPL LICENSE SUMMARY
+- *
+- * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of version 2 of the GNU General Public License as
+- * published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope that it will be useful, but
+- * WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+- * General Public License for more details.
+- *
+- * The full GNU General Public License is included in this distribution
+- * in the file called COPYING
+- *
+- * Contact Information:
+- *	Intel Corporation.
+- *	linux-mei@linux.intel.com
+- *	http://www.intel.com
+- *
+- * BSD LICENSE
+- *
+- * Copyright(c) 2013 - 2014 Intel Corporation. All rights reserved.
+- * All rights reserved.
+- *
+- * Redistribution and use in source and binary forms, with or without
+- * modification, are permitted provided that the following conditions
+- * are met:
+- *
+- *  * Redistributions of source code must retain the above copyright
+- *    notice, this list of conditions and the following disclaimer.
+- *  * Redistributions in binary form must reproduce the above copyright
+- *    notice, this list of conditions and the following disclaimer in
+- *    the documentation and/or other materials provided with the
+- *    distribution.
+- *  * Neither the name Intel Corporation nor the names of its
+- *    contributors may be used to endorse or promote products derived
+- *    from this software without specific prior written permission.
+- *
+- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+- *
+- *****************************************************************************/
++ */
+ #ifndef _MEI_HW_TXE_REGS_H_
+ #define _MEI_HW_TXE_REGS_H_
+ 
+diff --git a/drivers/misc/mei/hw-txe.c b/drivers/misc/mei/hw-txe.c
+index 0e3f2a8..785b260 100644
+--- a/drivers/misc/mei/hw-txe.c
++++ b/drivers/misc/mei/hw-txe.c
+@@ -1,17 +1,7 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
+- * Intel Management Engine Interface (Intel MEI) Linux driver
+  * Copyright (c) 2013-2019, Intel Corporation. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+- * more details.
+- *
++ * Intel Management Engine Interface (Intel MEI) Linux driver
+  */
+ 
+ #include <linux/pci.h>
+@@ -670,7 +660,7 @@ static int mei_txe_fw_status(struct mei_device *dev,
+ }
+ 
+ /**
+- *  mei_txe_hw_config - configure hardware at the start of the devices
++ * mei_txe_hw_config - configure hardware at the start of the devices
+  *
+  * @dev: the device structure
+  *
+diff --git a/drivers/misc/mei/hw-txe.h b/drivers/misc/mei/hw-txe.h
+index e1e8b66..96511b0 100644
+--- a/drivers/misc/mei/hw-txe.h
++++ b/drivers/misc/mei/hw-txe.h
+@@ -1,17 +1,7 @@
++/* SPDX-License-Identifier: GPL-2.0 */
+ /*
+- *
++ * Copyright (c) 2013-2016, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2013-2014, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+ #ifndef _MEI_HW_TXE_H_
+diff --git a/drivers/misc/mei/hw.h b/drivers/misc/mei/hw.h
+index 4f09bbc..8231b69 100644
+--- a/drivers/misc/mei/hw.h
++++ b/drivers/misc/mei/hw.h
+@@ -1,17 +1,7 @@
++/* SPDX-License-Identifier: GPL-2.0 */
+ /*
+- *
++ * Copyright (c) 2003-2018, Intel Corporation. All rights reserved
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2012, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+ #ifndef _MEI_HW_TYPES_H_
+@@ -35,7 +25,7 @@
+ /*
+  * MEI Version
+  */
+-#define HBM_MINOR_VERSION                   0
++#define HBM_MINOR_VERSION                   1
+ #define HBM_MAJOR_VERSION                   2
+ 
+ /*
+@@ -206,6 +196,7 @@ enum  mei_cl_disconnect_status {
+  * @dma_ring: message is on dma ring
+  * @internal: message is internal
+  * @msg_complete: last packet of the message
++ * @extension: extension of the header
+  */
+ struct mei_msg_hdr {
+ 	u32 me_addr:8;
+@@ -215,8 +206,14 @@ struct mei_msg_hdr {
+ 	u32 dma_ring:1;
+ 	u32 internal:1;
+ 	u32 msg_complete:1;
++	u32 extension[0];
+ } __packed;
+ 
++/* The length is up to 9 bits */
++#define MEI_MSG_MAX_LEN_MASK GENMASK(9, 0)
++
++#define MEI_MSG_HDR_MAX 2
++
+ struct mei_bus_message {
+ 	u8 hbm_cmd;
+ 	u8 data[0];
+@@ -307,7 +304,8 @@ struct mei_client_properties {
+ 	u8 protocol_version;
+ 	u8 max_number_of_connections;
+ 	u8 fixed_address;
+-	u8 single_recv_buf;
++	u8 single_recv_buf:1;
++	u8 reserved:7;
+ 	u32 max_msg_length;
+ } __packed;
+ 
+diff --git a/drivers/misc/mei/init.c b/drivers/misc/mei/init.c
+index 1d24d5e..bcee777 100644
+--- a/drivers/misc/mei/init.c
++++ b/drivers/misc/mei/init.c
+@@ -1,17 +1,7 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
++ * Copyright (c) 2012-2019, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2019, Intel Corporation. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+ #include <linux/export.h>
+@@ -133,12 +123,12 @@ int mei_reset(struct mei_device *dev)
+ 
+ 	/* enter reset flow */
+ 	interrupts_enabled = state != MEI_DEV_POWER_DOWN;
+-	dev->dev_state = MEI_DEV_RESETTING;
++	mei_set_devstate(dev, MEI_DEV_RESETTING);
+ 
+ 	dev->reset_count++;
+ 	if (dev->reset_count > MEI_MAX_CONSEC_RESET) {
+ 		dev_err(dev->dev, "reset: reached maximal consecutive resets: disabling the device\n");
+-		dev->dev_state = MEI_DEV_DISABLED;
++		mei_set_devstate(dev, MEI_DEV_DISABLED);
+ 		return -ENODEV;
+ 	}
+ 
+@@ -151,7 +141,7 @@ int mei_reset(struct mei_device *dev)
+ 
+ 	mei_hbm_reset(dev);
+ 
+-	dev->rd_msg_hdr = 0;
++	memset(dev->rd_msg_hdr, 0, sizeof(dev->rd_msg_hdr));
+ 
+ 	if (ret) {
+ 		dev_err(dev->dev, "hw_reset failed ret = %d\n", ret);
+@@ -160,7 +150,7 @@ int mei_reset(struct mei_device *dev)
+ 
+ 	if (state == MEI_DEV_POWER_DOWN) {
+ 		dev_dbg(dev->dev, "powering down: end of reset\n");
+-		dev->dev_state = MEI_DEV_DISABLED;
++		mei_set_devstate(dev, MEI_DEV_DISABLED);
+ 		return 0;
+ 	}
+ 
+@@ -172,11 +162,11 @@ int mei_reset(struct mei_device *dev)
+ 
+ 	dev_dbg(dev->dev, "link is established start sending messages.\n");
+ 
+-	dev->dev_state = MEI_DEV_INIT_CLIENTS;
++	mei_set_devstate(dev, MEI_DEV_INIT_CLIENTS);
+ 	ret = mei_hbm_start_req(dev);
+ 	if (ret) {
+ 		dev_err(dev->dev, "hbm_start failed ret = %d\n", ret);
+-		dev->dev_state = MEI_DEV_RESETTING;
++		mei_set_devstate(dev, MEI_DEV_RESETTING);
+ 		return ret;
+ 	}
+ 
+@@ -201,14 +191,14 @@ int mei_start(struct mei_device *dev)
+ 	mei_clear_interrupts(dev);
+ 
+ 	ret = mei_hw_config(dev);
+-	if(ret)
++	if (ret)
+ 		goto err;
+ 
+ 	dev_dbg(dev->dev, "reset in start the mei device.\n");
+ 
+ 	dev->reset_count = 0;
+ 	do {
+-		dev->dev_state = MEI_DEV_INITIALIZING;
++		mei_set_devstate(dev, MEI_DEV_INITIALIZING);
+ 		ret = mei_reset(dev);
+ 
+ 		if (ret == -ENODEV || dev->dev_state == MEI_DEV_DISABLED) {
+@@ -243,7 +233,7 @@ int mei_start(struct mei_device *dev)
+ 	return 0;
+ err:
+ 	dev_err(dev->dev, "link layer initialization failed.\n");
+-	dev->dev_state = MEI_DEV_DISABLED;
++	mei_set_devstate(dev, MEI_DEV_DISABLED);
+ 	mutex_unlock(&dev->device_lock);
+ 	return -ENODEV;
+ }
+@@ -262,7 +252,7 @@ int mei_restart(struct mei_device *dev)
+ 
+ 	mutex_lock(&dev->device_lock);
+ 
+-	dev->dev_state = MEI_DEV_POWER_UP;
++	mei_set_devstate(dev, MEI_DEV_POWER_UP);
+ 	dev->reset_count = 0;
+ 
+ 	err = mei_reset(dev);
+@@ -313,7 +303,7 @@ void mei_stop(struct mei_device *dev)
+ 	dev_dbg(dev->dev, "stopping the device.\n");
+ 
+ 	mutex_lock(&dev->device_lock);
+-	dev->dev_state = MEI_DEV_POWER_DOWN;
++	mei_set_devstate(dev, MEI_DEV_POWER_DOWN);
+ 	mutex_unlock(&dev->device_lock);
+ 	mei_cl_bus_remove_devices(dev);
+ 
+@@ -326,7 +316,7 @@ void mei_stop(struct mei_device *dev)
+ 
+ 	mei_reset(dev);
+ 	/* move device to disabled state unconditionally */
+-	dev->dev_state = MEI_DEV_DISABLED;
++	mei_set_devstate(dev, MEI_DEV_DISABLED);
+ 
+ 	mutex_unlock(&dev->device_lock);
+ }
+diff --git a/drivers/misc/mei/interrupt.c b/drivers/misc/mei/interrupt.c
+index 5a661cb..c70a8c7 100644
+--- a/drivers/misc/mei/interrupt.c
++++ b/drivers/misc/mei/interrupt.c
+@@ -1,20 +1,9 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
++ * Copyright (c) 2003-2018, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2012, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+-
+ #include <linux/export.h>
+ #include <linux/kthread.h>
+ #include <linux/interrupt.h>
+@@ -75,6 +64,8 @@ static inline int mei_cl_hbm_equal(struct mei_cl *cl,
+  */
+ static void mei_irq_discard_msg(struct mei_device *dev, struct mei_msg_hdr *hdr)
+ {
++	if (hdr->dma_ring)
++		mei_dma_ring_read(dev, NULL, hdr->extension[0]);
+ 	/*
+ 	 * no need to check for size as it is guarantied
+ 	 * that length fits into rd_msg_buf
+@@ -100,6 +91,7 @@ static int mei_cl_irq_read_msg(struct mei_cl *cl,
+ 	struct mei_device *dev = cl->dev;
+ 	struct mei_cl_cb *cb;
+ 	size_t buf_sz;
++	u32 length;
+ 
+ 	cb = list_first_entry_or_null(&cl->rd_pending, struct mei_cl_cb, list);
+ 	if (!cb) {
+@@ -119,25 +111,31 @@ static int mei_cl_irq_read_msg(struct mei_cl *cl,
+ 		goto discard;
+ 	}
+ 
+-	buf_sz = mei_hdr->length + cb->buf_idx;
++	length = mei_hdr->dma_ring ? mei_hdr->extension[0] : mei_hdr->length;
++
++	buf_sz = length + cb->buf_idx;
+ 	/* catch for integer overflow */
+ 	if (buf_sz < cb->buf_idx) {
+ 		cl_err(dev, cl, "message is too big len %d idx %zu\n",
+-		       mei_hdr->length, cb->buf_idx);
++		       length, cb->buf_idx);
+ 		cb->status = -EMSGSIZE;
+ 		goto discard;
+ 	}
+ 
+ 	if (cb->buf.size < buf_sz) {
+ 		cl_dbg(dev, cl, "message overflow. size %zu len %d idx %zu\n",
+-			cb->buf.size, mei_hdr->length, cb->buf_idx);
++			cb->buf.size, length, cb->buf_idx);
+ 		cb->status = -EMSGSIZE;
+ 		goto discard;
+ 	}
+ 
++	if (mei_hdr->dma_ring)
++		mei_dma_ring_read(dev, cb->buf.data + cb->buf_idx, length);
++
++	/*  for DMA read 0 length to generate an interrupt to the device */
+ 	mei_read_slots(dev, cb->buf.data + cb->buf_idx, mei_hdr->length);
+ 
+-	cb->buf_idx += mei_hdr->length;
++	cb->buf_idx += length;
+ 
+ 	if (mei_hdr->msg_complete) {
+ 		cl_dbg(dev, cl, "completed read length = %zu\n", cb->buf_idx);
+@@ -247,6 +245,9 @@ static inline int hdr_is_valid(u32 msg_hdr)
+ 	if (!msg_hdr || mei_hdr->reserved)
+ 		return -EBADMSG;
+ 
++	if (mei_hdr->dma_ring && mei_hdr->length != MEI_SLOT_SIZE)
++		return -EBADMSG;
++
+ 	return 0;
+ }
+ 
+@@ -267,20 +268,20 @@ int mei_irq_read_handler(struct mei_device *dev,
+ 	struct mei_cl *cl;
+ 	int ret;
+ 
+-	if (!dev->rd_msg_hdr) {
+-		dev->rd_msg_hdr = mei_read_hdr(dev);
++	if (!dev->rd_msg_hdr[0]) {
++		dev->rd_msg_hdr[0] = mei_read_hdr(dev);
+ 		(*slots)--;
+ 		dev_dbg(dev->dev, "slots =%08x.\n", *slots);
+ 
+-		ret = hdr_is_valid(dev->rd_msg_hdr);
++		ret = hdr_is_valid(dev->rd_msg_hdr[0]);
+ 		if (ret) {
+ 			dev_err(dev->dev, "corrupted message header 0x%08X\n",
+-				dev->rd_msg_hdr);
++				dev->rd_msg_hdr[0]);
+ 			goto end;
+ 		}
+ 	}
+ 
+-	mei_hdr = (struct mei_msg_hdr *)&dev->rd_msg_hdr;
++	mei_hdr = (struct mei_msg_hdr *)dev->rd_msg_hdr;
+ 	dev_dbg(dev->dev, MEI_HDR_FMT, MEI_HDR_PRM(mei_hdr));
+ 
+ 	if (mei_slots2data(*slots) < mei_hdr->length) {
+@@ -291,6 +292,12 @@ int mei_irq_read_handler(struct mei_device *dev,
+ 		goto end;
+ 	}
+ 
++	if (mei_hdr->dma_ring) {
++		dev->rd_msg_hdr[1] = mei_read_hdr(dev);
++		(*slots)--;
++		mei_hdr->length = 0;
++	}
++
+ 	/*  HBM message */
+ 	if (hdr_is_hbm(mei_hdr)) {
+ 		ret = mei_hbm_dispatch(dev, mei_hdr);
+@@ -324,7 +331,7 @@ int mei_irq_read_handler(struct mei_device *dev,
+ 			goto reset_slots;
+ 		}
+ 		dev_err(dev->dev, "no destination client found 0x%08X\n",
+-				dev->rd_msg_hdr);
++				dev->rd_msg_hdr[0]);
+ 		ret = -EBADMSG;
+ 		goto end;
+ 	}
+@@ -334,9 +341,8 @@ int mei_irq_read_handler(struct mei_device *dev,
+ 
+ reset_slots:
+ 	/* reset the number of slots and header */
++	memset(dev->rd_msg_hdr, 0, sizeof(dev->rd_msg_hdr));
+ 	*slots = mei_count_full_read_slots(dev);
+-	dev->rd_msg_hdr = 0;
+-
+ 	if (*slots == -EOVERFLOW) {
+ 		/* overflow - reset */
+ 		dev_err(dev->dev, "resetting due to slots overflow.\n");
+diff --git a/drivers/misc/mei/main.c b/drivers/misc/mei/main.c
+index b6aac84..3e4e434 100644
+--- a/drivers/misc/mei/main.c
++++ b/drivers/misc/mei/main.c
+@@ -1,18 +1,9 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
++ * Copyright (c) 2003-2018, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2003-2018, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
++
+ #include <linux/module.h>
+ #include <linux/moduleparam.h>
+ #include <linux/kernel.h>
+@@ -23,6 +14,7 @@
+ #include <linux/types.h>
+ #include <linux/fcntl.h>
+ #include <linux/poll.h>
++#include <linux/eventpoll.h>
+ #include <linux/init.h>
+ #include <linux/ioctl.h>
+ #include <linux/cdev.h>
+@@ -37,6 +29,12 @@
+ #include "mei_dev.h"
+ #include "client.h"
+ 
++static struct class *mei_class;
++static dev_t mei_devt;
++#define MEI_MAX_DEVS  MINORMASK
++static DEFINE_MUTEX(mei_minor_lock);
++static DEFINE_IDR(mei_idr);
++
+ /**
+  * mei_open - the open function
+  *
+@@ -861,15 +859,49 @@ static ssize_t fw_ver_show(struct device *device,
+ }
+ static DEVICE_ATTR_RO(fw_ver);
+ 
++/**
++ * dev_state_show - display device state
++ *
++ * @device: device pointer
++ * @attr: attribute pointer
++ * @buf:  char out buffer
++ *
++ * Return: number of the bytes printed into buf or error
++ */
++static ssize_t dev_state_show(struct device *device,
++			      struct device_attribute *attr, char *buf)
++{
++	struct mei_device *dev = dev_get_drvdata(device);
++	enum mei_dev_state dev_state;
++
++	mutex_lock(&dev->device_lock);
++	dev_state = dev->dev_state;
++	mutex_unlock(&dev->device_lock);
++
++	return sprintf(buf, "%s", mei_dev_state_str(dev_state));
++}
++static DEVICE_ATTR_RO(dev_state);
++
++/**
++ * dev_set_devstate: set to new device state and notify sysfs file.
++ *
++ * @dev: mei_device
++ * @state: new device state
++ */
+ void mei_set_devstate(struct mei_device *dev, enum mei_dev_state state)
+ {
++	struct device *clsdev;
++
+ 	if (dev->dev_state == state)
+ 		return;
+ 
+ 	dev->dev_state = state;
+ 
+-	if (dev->clsdev)
+-		sysfs_notify(&dev->clsdev->kobj, NULL, "dev_state");
++	clsdev = class_find_device_by_devt(mei_class, dev->cdev.dev);
++	if (clsdev) {
++		sysfs_notify(&clsdev->kobj, NULL, "dev_state");
++		put_device(clsdev);
++	}
+ }
+ 
+ /**
+@@ -882,17 +914,17 @@ void mei_set_devstate(struct mei_device *dev, enum mei_dev_state state)
+  * Return: number of the bytes printed into buf or error
+  */
+ static ssize_t kind_show(struct device *device,
+-                         struct device_attribute *attr, char *buf)
++			 struct device_attribute *attr, char *buf)
+ {
+-        struct mei_device *dev = dev_get_drvdata(device);
+-        ssize_t ret;
++	struct mei_device *dev = dev_get_drvdata(device);
++	ssize_t ret;
+ 
+-        if (dev->kind)
+-                ret = sprintf(buf, "%s\n", dev->kind);
+-        else
+-                ret = sprintf(buf, "%s\n", "mei");
++	if (dev->kind)
++		ret = sprintf(buf, "%s\n", dev->kind);
++	else
++		ret = sprintf(buf, "%s\n", "mei");
+ 
+-        return ret;
++	return ret;
+ }
+ static DEVICE_ATTR_RO(kind);
+ 
+@@ -902,6 +934,7 @@ static struct attribute *mei_attrs[] = {
+ 	&dev_attr_hbm_ver_drv.attr,
+ 	&dev_attr_tx_queue_limit.attr,
+ 	&dev_attr_fw_ver.attr,
++	&dev_attr_dev_state.attr,
+ 	&dev_attr_trc.attr,
+ 	&dev_attr_kind.attr,
+ 	NULL
+@@ -927,12 +960,6 @@ static const struct file_operations mei_fops = {
+ 	.llseek = no_llseek
+ };
+ 
+-static struct class *mei_class;
+-static dev_t mei_devt;
+-#define MEI_MAX_DEVS  MINORMASK
+-static DEFINE_MUTEX(mei_minor_lock);
+-static DEFINE_IDR(mei_idr);
+-
+ /**
+  * mei_minor_get - obtain next free device minor number
+  *
+@@ -1000,18 +1027,10 @@ int mei_register(struct mei_device *dev, struct device *parent)
+ 		goto err_dev_create;
+ 	}
+ 
+-	dev->clsdev = clsdev;
+-
+-	ret = mei_dbgfs_register(dev, dev_name(clsdev));
+-	if (ret) {
+-		dev_err(clsdev, "cannot register debugfs ret = %d\n", ret);
+-		goto err_dev_dbgfs;
+-	}
++	mei_dbgfs_register(dev, dev_name(clsdev));
+ 
+ 	return 0;
+ 
+-err_dev_dbgfs:
+-	device_destroy(mei_class, devno);
+ err_dev_create:
+ 	cdev_del(&dev->cdev);
+ err_dev_add:
+@@ -1022,13 +1041,14 @@ EXPORT_SYMBOL_GPL(mei_register);
+ 
+ void mei_deregister(struct mei_device *dev)
+ {
++	int devno;
++
++	devno = dev->cdev.dev;
+ 	cdev_del(&dev->cdev);
+ 
+ 	mei_dbgfs_deregister(dev);
+ 
+-	device_unregister(dev->clsdev);
+-
+-	dev->clsdev = NULL;
++	device_destroy(mei_class, devno);
+ 
+ 	mei_minor_free(dev);
+ }
+diff --git a/drivers/misc/mei/mei-trace.c b/drivers/misc/mei/mei-trace.c
+index 374edde..48d4c4f 100644
+--- a/drivers/misc/mei/mei-trace.c
++++ b/drivers/misc/mei/mei-trace.c
+@@ -1,17 +1,7 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
++ * Copyright (c) 2015-2016, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2015, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ #include <linux/module.h>
+ 
+diff --git a/drivers/misc/mei/mei-trace.h b/drivers/misc/mei/mei-trace.h
+index b52e9b9..df75803 100644
+--- a/drivers/misc/mei/mei-trace.h
++++ b/drivers/misc/mei/mei-trace.h
+@@ -1,17 +1,7 @@
++/* SPDX-License-Identifier: GPL-2.0 */
+ /*
+- *
++ * Copyright (c) 2015-2016, Intel Corporation. All rights reserved.
+  * Intel Management Engine Interface (Intel MEI) Linux driver
+- * Copyright (c) 2015, Intel Corporation.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
+  */
+ 
+ #if !defined(_MEI_TRACE_H_) || defined(TRACE_HEADER_MULTI_READ)
+diff --git a/drivers/misc/mei/mei_dev.h b/drivers/misc/mei/mei_dev.h
+index f98fdc8..021c82e 100644
+--- a/drivers/misc/mei/mei_dev.h
++++ b/drivers/misc/mei/mei_dev.h
+@@ -1,17 +1,7 @@
++/* SPDX-License-Identifier: GPL-2.0 */
+ /*
+- *
+- * Intel Management Engine Interface (Intel MEI) Linux driver
+  * Copyright (c) 2003-2019, Intel Corporation. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
++ * Intel Management Engine Interface (Intel MEI) Linux driver
+  */
+ 
+ #ifndef _MEI_DEV_H_
+@@ -122,6 +112,19 @@ struct mei_msg_data {
+ 	unsigned char *data;
+ };
+ 
++/**
++ * struct mei_dma_dscr - dma address descriptor
++ *
++ * @vaddr: dma buffer virtual address
++ * @daddr: dma buffer physical address
++ * @size : dma buffer size
++ */
++struct mei_dma_dscr {
++	void *vaddr;
++	dma_addr_t daddr;
++	size_t size;
++};
++
+ /* Maximum number of processed FW status registers */
+ #define MEI_FW_STATUS_MAX 6
+ /* Minimal  buffer for FW status string (8 bytes in dw + space or '\0') */
+@@ -379,7 +382,6 @@ struct mei_fw_version {
+  * struct mei_device -  MEI private device struct
+  *
+  * @dev         : device on a bus
+- * @clsdev      : device node (a class device)
+  * @cdev        : character device
+  * @minor       : minor number allocated for device
+  *
+@@ -413,6 +415,7 @@ struct mei_fw_version {
+  * @rd_msg_hdr  : read message header storage
+  *
+  * @hbuf_is_ready : query if the host host/write buffer is ready
++ * @dr_dscr: DMA ring descriptors: TX, RX, and CTRL
+  *
+  * @version     : HBM protocol version in use
+  * @hbm_f_pg_supported  : hbm feature pgi protocol
+@@ -451,7 +454,6 @@ struct mei_fw_version {
+  */
+ struct mei_device {
+ 	struct device *dev;
+-	struct device *clsdev;
+ 	struct cdev cdev;
+ 	int minor;
+ 
+@@ -492,11 +494,13 @@ struct mei_device {
+ #endif /* CONFIG_PM */
+ 
+ 	unsigned char rd_msg_buf[MEI_RD_MSG_BUF_SIZE];
+-	u32 rd_msg_hdr;
++	u32 rd_msg_hdr[MEI_MSG_HDR_MAX];
+ 
+ 	/* write buffer */
+ 	bool hbuf_is_ready;
+ 
++	struct mei_dma_dscr dr_dscr[DMA_DSCR_NUM];
++
+ 	struct hbm_version version;
+ 	unsigned int hbm_f_pg_supported:1;
+ 	unsigned int hbm_f_dc_supported:1;
+@@ -532,7 +536,6 @@ struct mei_device {
+ 	struct dentry *dbgfs_dir;
+ #endif /* CONFIG_DEBUG_FS */
+ 
+-
+ 	const struct mei_hw_ops *ops;
+ 	char hw[0] __aligned(sizeof(void *));
+ };
+@@ -591,6 +594,16 @@ int mei_restart(struct mei_device *dev);
+ void mei_stop(struct mei_device *dev);
+ void mei_cancel_work(struct mei_device *dev);
+ 
++void mei_set_devstate(struct mei_device *dev, enum mei_dev_state state);
++
++int mei_dmam_ring_alloc(struct mei_device *dev);
++void mei_dmam_ring_free(struct mei_device *dev);
++bool mei_dma_ring_is_allocated(struct mei_device *dev);
++void mei_dma_ring_reset(struct mei_device *dev);
++void mei_dma_ring_read(struct mei_device *dev, unsigned char *buf, u32 len);
++void mei_dma_ring_write(struct mei_device *dev, unsigned char *buf, u32 len);
++u32 mei_dma_ring_empty_slots(struct mei_device *dev);
++
+ /*
+  *  MEI interrupt functions prototype
+  */
+@@ -723,13 +736,10 @@ bool mei_hbuf_acquire(struct mei_device *dev);
+ bool mei_write_is_idle(struct mei_device *dev);
+ 
+ #if IS_ENABLED(CONFIG_DEBUG_FS)
+-int mei_dbgfs_register(struct mei_device *dev, const char *name);
++void mei_dbgfs_register(struct mei_device *dev, const char *name);
+ void mei_dbgfs_deregister(struct mei_device *dev);
+ #else
+-static inline int mei_dbgfs_register(struct mei_device *dev, const char *name)
+-{
+-	return 0;
+-}
++static inline void mei_dbgfs_register(struct mei_device *dev, const char *name) {}
+ static inline void mei_dbgfs_deregister(struct mei_device *dev) {}
+ #endif /* CONFIG_DEBUG_FS */
+ 
+@@ -769,4 +779,39 @@ static inline ssize_t mei_fw_status_str(struct mei_device *dev,
+ }
+ 
+ 
++static int device_match_devt(struct device *dev, const void *pdevt)
++{
++        return dev->devt == *(dev_t *)pdevt;
++}
++
++/**
++ * class_find_device_by_devt : device iterator for locating a particular device
++ * matching the device type.
++ * @class: class type
++ * @devt: device type of the device to match.
++ */
++static inline struct device *class_find_device_by_devt(struct class *class,
++                                                       dev_t devt)
++{
++        return class_find_device(class, NULL, &devt, device_match_devt);
++}
++
++
++#define DEFINE_SHOW_ATTRIBUTE(__name)                                   \
++static int __name ## _open(struct inode *inode, struct file *file)      \
++{                                                                       \
++        return single_open(file, __name ## _show, inode->i_private);    \
++}                                                                       \
++                                                                        \
++static const struct file_operations __name ## _fops = {                 \
++        .owner          = THIS_MODULE,                                  \
++        .open           = __name ## _open,                              \
++        .read           = seq_read,                                     \
++        .llseek         = seq_lseek,                                    \
++        .release        = single_release,                               \
++}
++
++typedef unsigned __poll_t;
++
++#define to_mei_cl_device(d) container_of(d, struct mei_cl_device, dev)
+ #endif
+diff --git a/drivers/misc/mei/pci-me.c b/drivers/misc/mei/pci-me.c
+index 9eb02e4..b90f48e 100644
+--- a/drivers/misc/mei/pci-me.c
++++ b/drivers/misc/mei/pci-me.c
+@@ -1,18 +1,9 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
+- * Intel Management Engine Interface (Intel MEI) Linux driver
+  * Copyright (c) 2003-2020, Intel Corporation. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
++ * Intel Management Engine Interface (Intel MEI) Linux driver
+  */
++
+ #include <linux/module.h>
+ #include <linux/kernel.h>
+ #include <linux/device.h>
+@@ -106,18 +97,15 @@ static const struct pci_device_id mei_me_pci_tbl[] = {
+ 
+ 	{MEI_PCI_DEVICE(MEI_DEV_ID_ICP_LP, MEI_ME_PCH12_CFG)},
+ 
+-	{MEI_PCI_DEVICE(MEI_DEV_ID_TGP_LP, MEI_ME_PCH12_CFG)},
+-
+-	{MEI_PCI_DEVICE(MEI_DEV_ID_MCC, MEI_ME_PCH12_CFG)},
+-	{MEI_PCI_DEVICE(MEI_DEV_ID_MCC_4, MEI_ME_PCH8_CFG)},
+-
+ 	{MEI_PCI_DEVICE(MEI_DEV_ID_TGP_LP, MEI_ME_PCH15_CFG)},
+ 
+ 	{MEI_PCI_DEVICE(MEI_DEV_ID_JSP_N, MEI_ME_PCH15_CFG)},
+ 
+ 	{MEI_PCI_DEVICE(MEI_DEV_ID_MCC, MEI_ME_PCH15_CFG)},
++	{MEI_PCI_DEVICE(MEI_DEV_ID_MCC_4, MEI_ME_PCH8_CFG)},
+ 
+ 	{MEI_PCI_DEVICE(MEI_DEV_ID_CDF, MEI_ME_PCH8_CFG)},
++
+ 	/* required last entry */
+ 	{0, }
+ };
+@@ -222,7 +210,8 @@ static int mei_me_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	pci_enable_msi(pdev);
+ 
+ 	hw->irq = pdev->irq;
+-	/* request and enable interrupt */
++
++	 /* request and enable interrupt */
+ 	irqflags = pci_dev_msi_enabled(pdev) ? IRQF_ONESHOT : IRQF_SHARED;
+ 
+ 	err = request_threaded_irq(pdev->irq,
+@@ -255,6 +244,7 @@ static int mei_me_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	 * in order to perform link reset flow upon system suspend.
+ 	 */
+ 	dev_pm_set_driver_flags(&pdev->dev, DPM_FLAG_NEVER_SKIP);
++	//pdev->dev_flags |= PCI_DEV_FLAGS_NEEDS_RESUME;
+ 
+ 	/*
+ 	 * ME maps runtime suspend/resume to D0i states,
+@@ -407,12 +397,11 @@ static int mei_me_pci_resume(struct device *device)
+ #ifdef CONFIG_PM
+ static int mei_me_pm_runtime_idle(struct device *device)
+ {
+-	struct pci_dev *pdev = to_pci_dev(device);
+ 	struct mei_device *dev;
+ 
+-	dev_dbg(&pdev->dev, "rpm: me: runtime_idle\n");
++	dev_dbg(device, "rpm: me: runtime_idle\n");
+ 
+-	dev = pci_get_drvdata(pdev);
++	dev = dev_get_drvdata(device);
+ 	if (!dev)
+ 		return -ENODEV;
+ 	if (mei_write_is_idle(dev))
+@@ -423,13 +412,12 @@ static int mei_me_pm_runtime_idle(struct device *device)
+ 
+ static int mei_me_pm_runtime_suspend(struct device *device)
+ {
+-	struct pci_dev *pdev = to_pci_dev(device);
+ 	struct mei_device *dev;
+ 	int ret;
+ 
+-	dev_dbg(&pdev->dev, "rpm: me: runtime suspend\n");
++	dev_dbg(device, "rpm: me: runtime suspend\n");
+ 
+-	dev = pci_get_drvdata(pdev);
++	dev = dev_get_drvdata(device);
+ 	if (!dev)
+ 		return -ENODEV;
+ 
+@@ -442,7 +430,7 @@ static int mei_me_pm_runtime_suspend(struct device *device)
+ 
+ 	mutex_unlock(&dev->device_lock);
+ 
+-	dev_dbg(&pdev->dev, "rpm: me: runtime suspend ret=%d\n", ret);
++	dev_dbg(device, "rpm: me: runtime suspend ret=%d\n", ret);
+ 
+ 	if (ret && ret != -EAGAIN)
+ 		schedule_work(&dev->reset_work);
+@@ -452,13 +440,12 @@ static int mei_me_pm_runtime_suspend(struct device *device)
+ 
+ static int mei_me_pm_runtime_resume(struct device *device)
+ {
+-	struct pci_dev *pdev = to_pci_dev(device);
+ 	struct mei_device *dev;
+ 	int ret;
+ 
+-	dev_dbg(&pdev->dev, "rpm: me: runtime resume\n");
++	dev_dbg(device, "rpm: me: runtime resume\n");
+ 
+-	dev = pci_get_drvdata(pdev);
++	dev = dev_get_drvdata(device);
+ 	if (!dev)
+ 		return -ENODEV;
+ 
+@@ -468,7 +455,7 @@ static int mei_me_pm_runtime_resume(struct device *device)
+ 
+ 	mutex_unlock(&dev->device_lock);
+ 
+-	dev_dbg(&pdev->dev, "rpm: me: runtime resume ret = %d\n", ret);
++	dev_dbg(device, "rpm: me: runtime resume ret = %d\n", ret);
+ 
+ 	if (ret)
+ 		schedule_work(&dev->reset_work);
+diff --git a/drivers/misc/mei/pci-txe.c b/drivers/misc/mei/pci-txe.c
+index f871964..5be7095 100644
+--- a/drivers/misc/mei/pci-txe.c
++++ b/drivers/misc/mei/pci-txe.c
+@@ -1,17 +1,7 @@
++// SPDX-License-Identifier: GPL-2.0
+ /*
+- *
+- * Intel Management Engine Interface (Intel MEI) Linux driver
+  * Copyright (c) 2013-2020, Intel Corporation. All rights reserved.
+- *
+- * This program is free software; you can redistribute it and/or modify it
+- * under the terms and conditions of the GNU General Public License,
+- * version 2, as published by the Free Software Foundation.
+- *
+- * This program is distributed in the hope it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+- * more details.
+- *
++ * Intel Management Engine Interface (Intel MEI) Linux driver
+  */
+ 
+ #include <linux/module.h>
+@@ -139,6 +129,7 @@ static int mei_txe_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+ 	 * in order to perform link reset flow upon system suspend.
+ 	 */
+ 	dev_pm_set_driver_flags(&pdev->dev, DPM_FLAG_NEVER_SKIP);
++	//pdev->dev_flags |= PCI_DEV_FLAGS_NEEDS_RESUME;
+ 
+ 	/*
+ 	 * TXE maps runtime suspend/resume to own power gating states,
+@@ -283,12 +274,11 @@ static int mei_txe_pci_resume(struct device *device)
+ #ifdef CONFIG_PM
+ static int mei_txe_pm_runtime_idle(struct device *device)
+ {
+-	struct pci_dev *pdev = to_pci_dev(device);
+ 	struct mei_device *dev;
+ 
+-	dev_dbg(&pdev->dev, "rpm: txe: runtime_idle\n");
++	dev_dbg(device, "rpm: txe: runtime_idle\n");
+ 
+-	dev = pci_get_drvdata(pdev);
++	dev = dev_get_drvdata(device);
+ 	if (!dev)
+ 		return -ENODEV;
+ 	if (mei_write_is_idle(dev))
+@@ -298,13 +288,12 @@ static int mei_txe_pm_runtime_idle(struct device *device)
+ }
+ static int mei_txe_pm_runtime_suspend(struct device *device)
+ {
+-	struct pci_dev *pdev = to_pci_dev(device);
+ 	struct mei_device *dev;
+ 	int ret;
+ 
+-	dev_dbg(&pdev->dev, "rpm: txe: runtime suspend\n");
++	dev_dbg(device, "rpm: txe: runtime suspend\n");
+ 
+-	dev = pci_get_drvdata(pdev);
++	dev = dev_get_drvdata(device);
+ 	if (!dev)
+ 		return -ENODEV;
+ 
+@@ -317,7 +306,7 @@ static int mei_txe_pm_runtime_suspend(struct device *device)
+ 
+ 	/* keep irq on we are staying in D0 */
+ 
+-	dev_dbg(&pdev->dev, "rpm: txe: runtime suspend ret=%d\n", ret);
++	dev_dbg(device, "rpm: txe: runtime suspend ret=%d\n", ret);
+ 
+ 	mutex_unlock(&dev->device_lock);
+ 
+@@ -329,13 +318,12 @@ static int mei_txe_pm_runtime_suspend(struct device *device)
+ 
+ static int mei_txe_pm_runtime_resume(struct device *device)
+ {
+-	struct pci_dev *pdev = to_pci_dev(device);
+ 	struct mei_device *dev;
+ 	int ret;
+ 
+-	dev_dbg(&pdev->dev, "rpm: txe: runtime resume\n");
++	dev_dbg(device, "rpm: txe: runtime resume\n");
+ 
+-	dev = pci_get_drvdata(pdev);
++	dev = dev_get_drvdata(device);
+ 	if (!dev)
+ 		return -ENODEV;
+ 
+@@ -347,7 +335,7 @@ static int mei_txe_pm_runtime_resume(struct device *device)
+ 
+ 	mutex_unlock(&dev->device_lock);
+ 
+-	dev_dbg(&pdev->dev, "rpm: txe: runtime resume ret = %d\n", ret);
++	dev_dbg(device, "rpm: txe: runtime resume ret = %d\n", ret);
+ 
+ 	if (ret)
+ 		schedule_work(&dev->reset_work);
+-- 
+1.8.3.1
+

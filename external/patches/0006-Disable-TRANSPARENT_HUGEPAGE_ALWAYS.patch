@@ -1,0 +1,30 @@
+From 57a8e2946bc159002da31f0289186734208ad949 Mon Sep 17 00:00:00 2001
+From: kwen <kui.wen@intel.com>
+Date: Fri, 23 Jul 2021 13:01:22 +0800
+Subject: [PATCH 06/18] Disable TRANSPARENT_HUGEPAGE_ALWAYS
+
+Huge page will cause the aic waste more memory
+
+Signed-off-by: kwen <kui.wen@intel.com>
+---
+ arch/x86/configs/x86_64_sg1_defconfig | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/x86/configs/x86_64_sg1_defconfig b/arch/x86/configs/x86_64_sg1_defconfig
+index e0e790a..7de34d8 100644
+--- a/arch/x86/configs/x86_64_sg1_defconfig
++++ b/arch/x86/configs/x86_64_sg1_defconfig
+@@ -972,8 +972,8 @@ CONFIG_ARCH_SUPPORTS_MEMORY_FAILURE=y
+ CONFIG_MEMORY_FAILURE=y
+ CONFIG_HWPOISON_INJECT=m
+ CONFIG_TRANSPARENT_HUGEPAGE=y
+-CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y
+-# CONFIG_TRANSPARENT_HUGEPAGE_MADVISE is not set
++# CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS is not set
++CONFIG_TRANSPARENT_HUGEPAGE_MADVISE=y
+ CONFIG_ARCH_WANTS_THP_SWAP=y
+ CONFIG_THP_SWAP=y
+ CONFIG_TRANSPARENT_HUGE_PAGECACHE=y
+-- 
+1.8.3.1
+

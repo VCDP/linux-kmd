@@ -1,0 +1,25 @@
+From 175769dc3d568c068e448aa349b2c1f2e483536e Mon Sep 17 00:00:00 2001
+From: xue bosheng <bosheng.xue@intel.comm>
+Date: Mon, 16 Nov 2020 19:25:42 +0800
+Subject: [PATCH 11/18] add kernel config CONFIG_MTD_PARTITIONED_MASTER
+
+---
+ arch/x86/configs/x86_64_sg1_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/x86/configs/x86_64_sg1_defconfig b/arch/x86/configs/x86_64_sg1_defconfig
+index 3c03d9d..de8f85c 100644
+--- a/arch/x86/configs/x86_64_sg1_defconfig
++++ b/arch/x86/configs/x86_64_sg1_defconfig
+@@ -1891,7 +1891,7 @@ CONFIG_MTD_BLOCK=m
+ # CONFIG_SM_FTL is not set
+ # CONFIG_MTD_OOPS is not set
+ # CONFIG_MTD_SWAP is not set
+-# CONFIG_MTD_PARTITIONED_MASTER is not set
++CONFIG_MTD_PARTITIONED_MASTER=y
+ 
+ #
+ # RAM/ROM/Flash chip drivers
+-- 
+1.8.3.1
+

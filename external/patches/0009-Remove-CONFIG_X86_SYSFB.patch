@@ -1,0 +1,26 @@
+From 6e064d11ef680b09e95ca268ca0a209c79f51b9b Mon Sep 17 00:00:00 2001
+From: Wenkui <kui.wen@intel.com>
+Date: Wed, 14 Oct 2020 10:10:25 +0800
+Subject: [PATCH 09/18] Remove CONFIG_X86_SYSFB
+
+Signed-off-by: Wenkui <kui.wen@intel.com>
+---
+ arch/x86/configs/x86_64_sg1_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/x86/configs/x86_64_sg1_defconfig b/arch/x86/configs/x86_64_sg1_defconfig
+index 6edea60..3c03d9d 100644
+--- a/arch/x86/configs/x86_64_sg1_defconfig
++++ b/arch/x86/configs/x86_64_sg1_defconfig
+@@ -658,7 +658,7 @@ CONFIG_PD6729=m
+ CONFIG_I82092=m
+ CONFIG_PCCARD_NONSTATIC=y
+ # CONFIG_RAPIDIO is not set
+-CONFIG_X86_SYSFB=y
++#CONFIG_X86_SYSFB=y
+ 
+ #
+ # Binary Emulations
+-- 
+1.8.3.1
+

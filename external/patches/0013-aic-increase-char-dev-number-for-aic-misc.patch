@@ -1,0 +1,58 @@
+From e273093c875fb723f9b14d625e5433ffbe18e487 Mon Sep 17 00:00:00 2001
+From: "yiyang.wang" <yiyang.wang@intel.com>
+Date: Fri, 22 Jan 2021 13:32:53 +0800
+Subject: [PATCH 13/18] aic: increase char dev number for aic misc
+
+Signed-off-by: yiyang.wang <yiyang.wang@intel.com>
+---
+ include/linux/fs.h | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/include/linux/fs.h b/include/linux/fs.h
+index 9242000..a5b1422 100644
+--- a/include/linux/fs.h
++++ b/include/linux/fs.h
+@@ -37,6 +37,7 @@
+ #include <linux/uuid.h>
+ #include <linux/errseq.h>
+ #include <linux/ioprio.h>
++#include <linux/major.h>
+ 
+ #include <asm/byteorder.h>
+ #include <uapi/linux/fs.h>
+@@ -2583,6 +2584,15 @@ static inline void bd_unlink_disk_holder(struct block_device *bdev,
+ #define CHRDEV_MAJOR_DYN_EXT_START 511
+ #define CHRDEV_MAJOR_DYN_EXT_END 384
+ 
++/*Need to create 512 binder devices*/
++/*Increase misc devices number from 256 to 1024*/
++#define MAJOR_FILTER(x, y, base) ({ \
++	typeof(x) _x = (x); \
++	typeof(y) _y = (y); \
++	(void) (&_x == &_y); \
++	_x == _y ? base * 4 : base; \
++})
++
+ extern int alloc_chrdev_region(dev_t *, unsigned, unsigned, const char *);
+ extern int register_chrdev_region(dev_t, unsigned, const char *);
+ extern int __register_chrdev(unsigned int major, unsigned int baseminor,
+@@ -2596,12 +2606,14 @@ extern void chrdev_show(struct seq_file *,off_t);
+ static inline int register_chrdev(unsigned int major, const char *name,
+ 				  const struct file_operations *fops)
+ {
+-	return __register_chrdev(major, 0, 256, name, fops);
++	return __register_chrdev(major, 0, MAJOR_FILTER(major,
++		(unsigned int)MISC_MAJOR, 256), name, fops);
+ }
+ 
+ static inline void unregister_chrdev(unsigned int major, const char *name)
+ {
+-	__unregister_chrdev(major, 0, 256, name);
++	__unregister_chrdev(major, 0, MAJOR_FILTER(major,
++		(unsigned int)MISC_MAJOR, 256), name);
+ }
+ 
+ /* fs/block_dev.c */
+-- 
+1.8.3.1
+

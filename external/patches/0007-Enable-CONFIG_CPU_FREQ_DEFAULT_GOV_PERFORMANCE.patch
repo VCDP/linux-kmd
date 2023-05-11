@@ -1,0 +1,30 @@
+From 514121b7dd7172934e4f5bbad359898890352064 Mon Sep 17 00:00:00 2001
+From: kwen <kui.wen@intel.com>
+Date: Fri, 23 Jul 2021 13:04:57 +0800
+Subject: [PATCH 07/18] Enable CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE
+
+Signed-off-by: kwen <kui.wen@intel.com>
+---
+ arch/x86/configs/x86_64_sg1_defconfig | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/x86/configs/x86_64_sg1_defconfig b/arch/x86/configs/x86_64_sg1_defconfig
+index 7de34d8..6edea60 100644
+--- a/arch/x86/configs/x86_64_sg1_defconfig
++++ b/arch/x86/configs/x86_64_sg1_defconfig
+@@ -531,10 +531,10 @@ CONFIG_CPU_FREQ=y
+ CONFIG_CPU_FREQ_GOV_ATTR_SET=y
+ CONFIG_CPU_FREQ_GOV_COMMON=y
+ CONFIG_CPU_FREQ_STAT=y
+-# CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE is not set
++CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y
+ # CONFIG_CPU_FREQ_DEFAULT_GOV_POWERSAVE is not set
+ # CONFIG_CPU_FREQ_DEFAULT_GOV_USERSPACE is not set
+-CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND=y
++# CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND is not set
+ # CONFIG_CPU_FREQ_DEFAULT_GOV_CONSERVATIVE is not set
+ # CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set
+ CONFIG_CPU_FREQ_GOV_PERFORMANCE=y
+-- 
+1.8.3.1
+
