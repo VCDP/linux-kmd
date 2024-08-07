@@ -1,11 +1,11 @@
 # Define the kmod package name here.
 %define kmod_name ukmd
 
-%{!?_ver: %define _ver 5.14.0-284}
-%{!?_rever: %define _rever 54017}
+%{!?_ver: %define _ver 5.14.0-427}
+%{!?_rever: %define _rever 54018}
 
 # If _kversion isn't defined on the rpmbuild line, define it here.
-%{!?_kversion: %define _kversion 5.14.0-284}
+%{!?_kversion: %define _kversion 5.14.0-427}
 
 Name:    kmod-%{kmod_name}
 Version: %{_ver}

@@ -6,5 +6,5 @@ obj-y += drm_ukmd_compat.o
 endif
 drm_ukmd_compat-y += main.o
 
-drm_ukmd_compat-y += ../drivers/dma-buf/dma-resv.o ../drivers/dma-buf/dma-fence.o ../drivers/dma-buf/seqno-fence.o ../drivers/dma-buf/sync_file.o ../drivers/dma-buf/dma-buf.o ../drivers/dma-buf/dma-fence-array.o ../drivers/dma-buf/dma-fence-chain.o hdmi.o drm_mipi_dsi.o drm_panel_orientation_quirks.o
+drm_ukmd_compat-y += ../drivers/dma-buf/dma-resv.o ../drivers/dma-buf/dma-fence.o ../drivers/dma-buf/seqno-fence.o ../drivers/dma-buf/sync_file.o ../drivers/dma-buf/dma-buf.o ../drivers/dma-buf/dma-fence-array.o ../drivers/dma-buf/dma-fence-chain.o hdmi.o drm_mipi_dsi.o drm_panel_orientation_quirks.o filemap.o vmscan.o swiotlb.o
 drm_ukmd_compat-$(CPTCFG_KERNEL_5_0) += backport-5.0.o

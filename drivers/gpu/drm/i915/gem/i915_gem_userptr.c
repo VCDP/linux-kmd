@@ -402,7 +402,7 @@ static struct sg_table *
 __i915_gem_userptr_alloc_pages(struct drm_i915_gem_object *obj,
 			       struct page **pvec, unsigned long num_pages)
 {
-	unsigned int max_segment = i915_sg_segment_size();
+	unsigned int max_segment = i915_sg_segment_size(obj->base.dev->dev);
 	struct sg_table *st;
 	unsigned int sg_page_sizes;
 	int ret;

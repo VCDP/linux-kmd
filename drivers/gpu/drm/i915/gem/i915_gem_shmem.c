@@ -38,7 +38,7 @@ static int shmem_get_pages(struct drm_i915_gem_object *obj)
 	struct sgt_iter sgt_iter;
 	struct page *page;
 	unsigned long last_pfn = 0;	/* suppress gcc warning */
-	unsigned int max_segment = i915_sg_segment_size();
+	unsigned int max_segment = i915_sg_segment_size(i915->drm.dev);
 	unsigned int sg_page_sizes;
 	struct pagevec pvec;
 	gfp_t noreclaim;

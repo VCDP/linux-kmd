@@ -10,6 +10,8 @@
 #include <linux/pfn.h>
 #include <linux/scatterlist.h>
 #include <linux/swiotlb.h>
+#include <xen/xen.h>
+#include <linux/dma-mapping.h>
 
 #include "i915_gem.h"
 /*
@@ -105,7 +107,7 @@ static inline unsigned int i915_sg_page_sizes(struct scatterlist *sg)
 
 	return page_sizes;
 }
-
+#if 0
 static inline unsigned int i915_sg_segment_size(void)
 {
 	unsigned int size = swiotlb_max_segment();
@@ -119,6 +121,28 @@ static inline unsigned int i915_sg_segment_size(void)
 		size = PAGE_SIZE;
 
 	return size;
+}
+#endif
+static inline unsigned int i915_sg_segment_size(struct device *dev)
+{
+        size_t max = min_t(size_t, UINT_MAX, dma_max_mapping_size(dev));
+
+        /*
+         * For Xen PV guests pages aren't contiguous in DMA (machine) address
+         * space.  The DMA API takes care of that both in dma_alloc_* (by
+         * calling into the hypervisor to make the pages contiguous) and in
+         * dma_map_* (by bounce buffering).  But i915 abuses ignores the
+         * coherency aspects of the DMA API and thus can't cope with bounce
+         * buffering actually happening, so add a hack here to force small
+         * allocations and mappings when running in PV mode on Xen.
+         *
+         * Note this will still break if bounce buffering is required for other
+         * reasons, like confidential computing hypervisors or PCIe root ports
+         * with addressing limitations.
+         */
+        //if (xen_pv_domain())
+        //        max = PAGE_SIZE;
+        return round_down(max, PAGE_SIZE);
 }
 
 bool i915_sg_trim(struct sg_table *orig_st);

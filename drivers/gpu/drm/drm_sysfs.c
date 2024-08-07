@@ -52,7 +52,7 @@ static struct device_type drm_sysfs_device_minor = {
 
 struct class *drm_class;
 
-static char *drm_devnode(struct device *dev, umode_t *mode)
+static char *drm_devnode(const struct device *dev, umode_t *mode)
 {
 	return kasprintf(GFP_KERNEL, "dri/%s", dev_name(dev));
 }

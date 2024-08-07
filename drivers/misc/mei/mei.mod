@@ -1,2 +1,0 @@
-/home/media/wj/kmd-backport/drivers/misc/mei/init.o /home/media/wj/kmd-backport/drivers/misc/mei/hbm.o /home/media/wj/kmd-backport/drivers/misc/mei/interrupt.o /home/media/wj/kmd-backport/drivers/misc/mei/client.o /home/media/wj/kmd-backport/drivers/misc/mei/main.o /home/media/wj/kmd-backport/drivers/misc/mei/dma-ring.o /home/media/wj/kmd-backport/drivers/misc/mei/bus.o /home/media/wj/kmd-backport/drivers/misc/mei/bus-fixup.o /home/media/wj/kmd-backport/drivers/misc/mei/debugfs.o /home/media/wj/kmd-backport/drivers/misc/mei/mei-trace.o
-

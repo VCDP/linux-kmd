@@ -38,6 +38,8 @@ struct drm_fb_helper;
 #include <linux/kgdb.h>
 #include <linux/vgaarb.h>
 #include <linux/pci.h>
+#include <linux/fb.h>
+#include <linux/aperture.h>
 
 enum mode_set_atomic {
 	LEAVE_ATOMIC_MODE_SET,
@@ -518,7 +520,7 @@ drm_fb_helper_remove_conflicting_pci_framebuffers(struct pci_dev *pdev,
 	 * otherwise the vga fbdev driver falls over.
 	 */
 #if IS_REACHABLE(CONFIG_FB)
-	ret = remove_conflicting_pci_framebuffers(pdev, name);
+	ret = aperture_remove_conflicting_pci_devices(pdev, name);
 #endif
 	if (ret == 0)
 		ret = vga_remove_vgacon(pdev);
