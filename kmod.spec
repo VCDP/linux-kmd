@@ -7,6 +7,10 @@
 # If _kversion isn't defined on the rpmbuild line, define it here.
 %{!?_kversion: %define _kversion 5.14.0-427}
 
+%define signing_script /usr/src/kernels/%{_kversion}/scripts/sign-file
+%define private_key %{_builddir}/signing/my_signing_key.priv
+%define public_key %{_builddir}/signing/my_signing_key_pub.der
+
 Name:    kmod-%{kmod_name}
 Version: %{_ver}
 Release: %{_rever}%{?dist}
@@ -43,6 +47,15 @@ pwd
 %{__make} %{?_smp_mflags} KLIB=/lib/modules/%{_kversion}/
 
 %install
+mkdir -p %{_builddir}/signing
+cp -r signing/* %{_builddir}/signing/
+chmod -R 755 %{_builddir}/signing/
+pushd %{_builddir}/signing/
+openssl req -x509 -new -nodes -utf8 -sha256 -days 36500 \
+    -batch -config configuration_file.config -outform DER \
+    -out my_signing_key_pub.der \
+    -keyout my_signing_key.priv
+popd
 %{__install} -d %{buildroot}/lib/modules/%{_kversion}/extra/%{kmod_name}/
 cp compat/drm_ukmd_compat.ko %{buildroot}/lib/modules/%{_kversion}/extra/%{kmod_name}/
 cp drivers/gpu/drm/drm.ko %{buildroot}/lib/modules/%{_kversion}/extra/%{kmod_name}/
@@ -53,6 +66,9 @@ cp drivers/gpu/drm/i915/i915_spi.ko %{buildroot}/lib/modules/%{_kversion}/extra/
 cp drivers/misc/mei/mei.ko %{buildroot}/lib/modules/%{_kversion}/extra/%{kmod_name}/
 cp drivers/misc/mei/mei-me.ko %{buildroot}/lib/modules/%{_kversion}/extra/%{kmod_name}/
 cp drivers/misc/mei/mei-gsc.ko %{buildroot}/lib/modules/%{_kversion}/extra/%{kmod_name}/
+for ko in %{buildroot}/lib/modules/%{_kversion}/extra/%{kmod_name}/*.ko; do
+    %{signing_script} sha256 %{private_key} %{public_key} $ko
+done
 %{__install} -d %{buildroot}%{_sysconfdir}/depmod.d/
 echo "override drm * extra/ukmd" > %{buildroot}%{_sysconfdir}/depmod.d/kmod-ukmd.conf
 echo "override drm_ukmd_compat * extra/ukmd" >> %{buildroot}%{_sysconfdir}/depmod.d/kmod-ukmd.conf
