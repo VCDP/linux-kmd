@@ -21,6 +21,16 @@ KERNEL_MAKEFILE := $(KLIB_BUILD)/Makefile
 CONFIG_MD5 := $(shell md5sum $(KERNEL_CONFIG) 2>/dev/null | sed 's/\s.*//')
 
 export KLIB KLIB_BUILD BACKPORT_DIR KMODDIR KMODPATH_ARG
+MODULES = \
+	$(BACKPORT_DIR)/compat/drm_ukmd_compat.ko \
+	$(BACKPORT_DIR)/drivers/gpu/drm/drm.ko \
+	$(BACKPORT_DIR)/drivers/gpu/drm/drm_kms_helper.ko \
+	$(BACKPORT_DIR)/drivers/gpu/drm/drm_shmem_helper.ko \
+	$(BACKPORT_DIR)/drivers/gpu/drm/i915/i915.ko \
+	$(BACKPORT_DIR)/drivers/gpu/drm/i915/i915_spi.ko \
+	$(BACKPORT_DIR)/drivers/misc/mei/mei.ko \
+	$(BACKPORT_DIR)/drivers/misc/mei/mei-me.ko \
+	$(BACKPORT_DIR)/drivers/misc/mei/mei-gsc.ko
 
 # disable built-in rules for this file
 .SUFFIXES:
@@ -28,6 +38,7 @@ export KLIB KLIB_BUILD BACKPORT_DIR KMODDIR KMODPATH_ARG
 .PHONY: default
 default:
 	@$(MAKE) modules
+	@$(MAKE) sign-modules
 
 .PHONY: mrproper
 mrproper:
@@ -35,6 +46,16 @@ mrproper:
 	@rm -f .config
 	@rm -f .kernel_config_md5 Kconfig.versions Kconfig.kernel
 	@rm -f backport-include/backport/autoconf.h
+
+# Signing the modules
+.PHONY: sign-modules
+sign-modules:
+	@echo "Signing modules..."
+	@chmod +x ./signing/*
+	@for module in $(MODULES); do \
+		(cd signing && ./signfile-ko.sh $$module); \
+	done
+	@echo "Modules signed."
 
 .DEFAULT:
 	@set -e ; test -f .local-symbols || (						\
